@@ -37,8 +37,8 @@ This GitHub workflow system provides automated validation of CAMARA API definiti
 ## Architecture
 
 ```
-ReleaseManagement Repo (Trigger)
-    ↓ Manual Dispatch
+ReleaseManagement Repo (Trigger & Reusable Workflows)
+    ↓ Manual Dispatch or Comment Trigger
 ┌─────────────────────────────────┐
 │  api-review-trigger.yml         │
 │  - Validates inputs             │
@@ -48,18 +48,25 @@ ReleaseManagement Repo (Trigger)
     ↓ Calls
 ┌─────────────────────────────────┐
 │  api-review-reusable.yml        │
+│  - Checks out workflow repo     │
 │  - Checks out PR branch         │
 │  - Runs validation script       │
 │  - Generates reports            │
 │  - Creates artifacts            │
 └─────────────────────────────────┘
+    ↓ Uses
+┌─────────────────────────────────┐
+│  /scripts/api_review_validator.py │
+│  - CAMARA API validation logic  │
+│  - Must be in workflow repo     │
+└─────────────────────────────────┘
 ```
 
 ## Setup Instructions
 
-### 1. Install Workflows in ReleaseManagement Repository
+### 1. Install Workflows and Script in ReleaseManagement Repository
 
-Place the workflow files in the `.github/workflows/` directory of the ReleaseManagement repository:
+Place the workflow files and validation script in the `.github/workflows/` and `/scripts/` directories:
 
 ```
 ReleaseManagement/
@@ -67,10 +74,14 @@ ReleaseManagement/
 │   └── workflows/
 │       ├── api-review-trigger.yml      # Main trigger workflow
 │       └── api-review-reusable.yml     # Reusable validation workflow
+├── scripts/
+│   └── api_review_validator.py         # REQUIRED: Python validation script
 └── documentation/
     └── SupportingDocuments/
         └── CAMARA_API_Review_Workflow_Usage_Guide.md  # This guide
 ```
+
+**⚠️ CRITICAL REQUIREMENT**: The `api_review_validator.py` script **MUST** be present in the `/scripts/` directory of the repository where the workflows are defined. The workflow will fail if this script is missing.
 
 ### 2. Required Permissions
 
@@ -86,6 +97,19 @@ The workflows use `secrets.GITHUB_TOKEN` which should have sufficient permission
 - Read pull requests from other CAMARA repositories
 - Post comments to issues in ReleaseManagement repository
 - Access repository contents
+
+## Self-Contained Design
+
+The reusable workflow is **self-contained** and looks for its dependencies in the **same repository where it's defined**:
+
+- ✅ **Workflow Repository** (`${{ github.repository }}`): Contains the workflows and validation script
+- ✅ **Target Repository**: The CAMARA project repository being reviewed
+- ✅ **Separation Ready**: Trigger and reusable workflows can be in different repositories
+
+**Example**:
+- Workflows run from: `hdamker/ReleaseManagement`
+- Script expected at: `hdamker/ReleaseManagement/scripts/api_review_validator.py`
+- Target review: `camaraproject/QualityOnDemand/pull/456`
 
 ## Usage Instructions
 
@@ -176,7 +200,8 @@ Both trigger methods follow the same execution and results process:
 1. Watch the workflow execution in the Actions tab (for manual triggers) or wait for completion (for comment triggers)
 2. The workflow will:
    - Validate the PR URL and check PR status
-   - Check out the PR branch
+   - Check out the workflow repository (for validation script)
+   - Check out the PR branch (target repository)
    - Find API definition files in `/code/API_definitions/`
    - Run comprehensive validation checks
    - Generate reports
@@ -392,6 +417,24 @@ Commonalities Version: 0.6
 
 ## Troubleshooting
 
+### Script Missing Issues
+
+#### "❌ API Validator script not found!"
+This is the most common issue. The error message will show:
+
+```
+❌ API Validator script not found!
+Expected location: review-tools/scripts/api_review_validator.py
+Workflow repository: hdamker/ReleaseManagement
+Please ensure the api_review_validator.py script exists at:
+  hdamker/ReleaseManagement/scripts/api_review_validator.py
+```
+
+**Solutions:**
+1. **Check script location**: Ensure `api_review_validator.py` exists at `/scripts/api_review_validator.py` in your workflow repository
+2. **Check file permissions**: Make sure the script is readable
+3. **Check repository**: Verify you're running workflows from the repository that contains the script
+
 ### Comment Trigger Issues
 
 #### "No valid CAMARA PR URL found in lines 3-4 of issue description"
@@ -424,6 +467,7 @@ Line 4:
 - Check the workflow run for errors (link provided in acknowledgment)
 - Verify the target repository and PR are accessible
 - Check if API definition files exist in expected locations
+- **Most common**: Check if the validation script exists
 
 ### Manual Trigger Issues
 
@@ -452,6 +496,7 @@ Line 4:
 - Check the Actions logs for specific error messages
 - Verify GitHub token permissions
 - Ensure target repository is accessible
+- **Most common**: Check if the Python validation script exists
 
 ### Permission Issues
 
@@ -478,6 +523,11 @@ Line 4:
 
 ### Debug Steps
 
+#### For Script Issues
+1. **Verify script exists**: Check `scripts/api_review_validator.py` in your workflow repository
+2. **Check workflow logs**: Look for the "Locate API Validator Script" step
+3. **Verify script syntax**: Test the Python script locally if possible
+
 #### For Comment Triggers
 1. Check if the comment appears in the issue
 2. Look for workflow runs in ReleaseManagement → Actions
@@ -495,33 +545,38 @@ Line 4:
 2. Check that API files exist in `/code/API_definitions/`
 3. Review the detailed validation logs in the "api-review" job
 4. Download workflow artifacts if available
+5. **Always check**: Ensure `scripts/api_review_validator.py` exists in workflow repository
 
-## Customization
+## Repository Setup Requirements
 
-### Modifying Validation Rules
+### For Running Your Own Instance
 
-To add or modify validation checks:
+If you want to run the workflows from your own fork or repository:
 
-1. Edit the embedded Python script in `api-review-reusable.yml`
-2. Add new validation methods to the `CAMARAAPIValidator` class
-3. Call new methods from `validate_api_file()`
-4. Update the `manual_checks_needed` list as appropriate
+1. **Fork or copy** the ReleaseManagement repository
+2. **Ensure the following files exist**:
+   ```
+   your-repo/
+   ├── .github/workflows/
+   │   ├── api-review-trigger.yml
+   │   └── api-review-reusable.yml
+   ├── scripts/
+   │   └── api_review_validator.py  # CRITICAL: Must exist
+   └── documentation/...
+   ```
+3. **Configure permissions** for accessing other CAMARA repositories
+4. **Test with a simple PR** to verify everything works
 
-### Adding New Review Types
+### For Official CAMARA Usage
 
-To support additional review types:
+When moving to official CAMARA usage:
 
-1. Add new option to `review_type` input in trigger workflow
-2. Update URL validation logic in reusable workflow
-3. Modify Python script to handle new version patterns
-
-### Changing Report Format
-
-To customize report generation:
-
-1. Modify the `generate_report()` function in the Python script
-2. Update markdown templates for summary and detailed reports
-3. Adjust artifact names and retention policies as needed
+1. **Upload all three files** to `camaraproject/ReleaseManagement`:
+   - `api-review-trigger.yml`
+   - `api-review-reusable.yml` 
+   - `scripts/api_review_validator.py`
+2. **Configure repository permissions** for cross-repository access
+3. **Test thoroughly** with existing release candidate PRs
 
 ## Security Considerations
 
@@ -529,18 +584,21 @@ To customize report generation:
 - No sensitive data is stored or transmitted
 - All validation is performed in isolated GitHub Actions runners
 - Reports contain only structural/compliance information, not business logic details
+- **Python script** must be maintained and secured in the workflow repository
 
 ## Limitations
 
-1. **File Location**: Only checks standard CAMARA directories
+1. **File Location**: Only checks standard CAMARA directories (`/code/API_definitions/`)
 2. **Cross-file References**: Limited validation of external references
 3. **Business Logic**: Cannot validate API design appropriateness
 4. **Real-time Data**: No validation against external systems or live endpoints
 5. **Language Support**: Currently focused on YAML/OpenAPI definitions only
+6. **Script Dependency**: Requires manual maintenance of Python validation script
 
 ## Support and Feedback
 
 For issues with the workflow system:
-1. Check the GitHub Actions logs for detailed error information
-2. Review this usage guide for common troubleshooting steps
-3. Create an issue in the ReleaseManagement repository with workflow run details
+1. **Check script location**: Verify `scripts/api_review_validator.py` exists in workflow repository
+2. **Check the GitHub Actions logs** for detailed error information
+3. **Review this usage guide** for common troubleshooting steps
+4. **Create an issue** in the ReleaseManagement repository with workflow run details
