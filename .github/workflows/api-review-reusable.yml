@@ -136,24 +136,37 @@ jobs:
           echo "📁 Target repository structure:"
           find target-repo -type f -name "*.yaml" -o -name "*.yml" | head -10 || echo "No YAML files found"
           
-          # Run the validation
+          # Run the validation - script now always exits with code 0
           echo "🚀 Starting validation..."
           python api_review_validator.py "./target-repo" "${{ inputs.commonalities_version }}" "./review-output"
           
-          # Capture exit code
-          VALIDATION_EXIT_CODE=$?
+          echo "📊 Validation analysis completed"
           
-          # Set output for next steps
-          if [ $VALIDATION_EXIT_CODE -eq 0 ]; then
-            echo "review_status=success" >> $GITHUB_OUTPUT
-            echo "✅ API review completed successfully"
+          # Check if reports were generated
+          if [[ -f "./review-output/summary.md" ]]; then
+            echo "✅ Summary report generated"
+            
+            # Parse the summary to determine if there are critical issues
+            if grep -q "🔴 Critical: 0" "./review-output/summary.md"; then
+              echo "review_status=success" >> $GITHUB_OUTPUT
+              echo "critical_issues=0" >> $GITHUB_OUTPUT
+              echo "✅ No critical issues found - ready for release"
+            else
+              # Extract critical issue count
+              CRITICAL_COUNT=$(grep -o "🔴 Critical: [0-9]*" "./review-output/summary.md" | grep -o "[0-9]*" || echo "unknown")
+              echo "review_status=has_critical_issues" >> $GITHUB_OUTPUT
+              echo "critical_issues=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+              echo "⚠️ Found $CRITICAL_COUNT critical issue(s) - requires attention before release"
+            fi
           else
-            echo "review_status=failed" >> $GITHUB_OUTPUT
-            echo "❌ API review found critical issues (exit code: $VALIDATION_EXIT_CODE)"
+            echo "review_status=error" >> $GITHUB_OUTPUT
+            echo "critical_issues=unknown" >> $GITHUB_OUTPUT
+            echo "❌ No summary report generated - validation may have failed"
           fi
 
       - name: Upload Detailed Report
         uses: actions/upload-artifact@v4
+        if: always()  # Always upload, even if validation found issues
         with:
           name: api-review-detailed-report
           path: ./review-output/detailed-report.md
@@ -161,23 +174,37 @@ jobs:
 
       - name: Upload Summary for Comment
         uses: actions/upload-artifact@v4
+        if: always()  # Always upload, even if validation found issues
         with:
           name: api-review-summary
           path: ./review-output/summary.md
           retention-days: 7
 
       - name: Display Review Summary
+        if: always()  # Always display summary, even if validation found issues
         run: |
           echo "## 📋 API Review Summary"
           if [ -f "./review-output/summary.md" ]; then
             cat ./review-output/summary.md
           else
             echo "❌ Summary file not generated"
+            echo "This usually indicates an error in the validation script"
           fi
 
       - name: Fail on Critical Issues
-        if: steps.review.outputs.review_status == 'failed'
+        if: always() && steps.review.outputs.validation_exit_code != '0'
         run: |
-          echo "❌ API review found critical issues that must be addressed"
-          echo "Please download the detailed report and review all findings"
-          exit 1
+          EXIT_CODE="${{ steps.review.outputs.validation_exit_code }}"
+          echo "🎯 API Review Results:"
+          echo "   Exit Code: $EXIT_CODE"
+          
+          if [ "$EXIT_CODE" = "0" ]; then
+            echo "✅ No critical issues found - ready for release!"
+          else
+            echo "❌ Critical issues found that must be addressed before release"
+            echo "📄 Please download the detailed report and review all findings"
+            echo "🔄 After fixing issues, re-run the review workflow"
+            echo ""
+            echo "This workflow failure is intentional to prevent release with critical issues."
+            exit 1
+          fi
