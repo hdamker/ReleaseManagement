@@ -237,20 +237,59 @@ jobs:
       - name: Get PR Details
         id: pr_details
         run: |
+          REPO_OWNER="${{ steps.parse.outputs.repo_owner }}"
+          REPO_NAME="${{ steps.parse.outputs.repo_name }}"
+          PR_NUMBER="${{ steps.parse.outputs.pr_number }}"
+          
+          echo "🔍 Getting PR details for: $REPO_OWNER/$REPO_NAME#$PR_NUMBER"
+          
+          # Construct API URL
+          API_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER"
+          echo "📡 API URL: $API_URL"
+          
           # Get PR information using GitHub API
           PR_RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ steps.parse.outputs.repo_owner }}/${{ steps.parse.outputs.repo_name }}/pulls/${{ steps.parse.outputs.pr_number }}")
+            "$API_URL")
+          
+          # Check if curl was successful
+          if [[ $? -ne 0 ]]; then
+            echo "❌ Failed to fetch PR details from GitHub API"
+            exit 1
+          fi
+          
+          # Check for API errors
+          if echo "$PR_RESPONSE" | jq -e '.message' > /dev/null 2>&1; then
+            ERROR_MESSAGE=$(echo "$PR_RESPONSE" | jq -r '.message')
+            echo "❌ GitHub API error: $ERROR_MESSAGE"
+            exit 1
+          fi
           
           # Check if PR exists and is open
           PR_STATE=$(echo "$PR_RESPONSE" | jq -r '.state // "not_found"')
+          echo "📋 PR State: $PR_STATE"
+          
           if [[ "$PR_STATE" != "open" ]]; then
             echo "❌ PR is not open or does not exist. State: $PR_STATE"
+            if [[ "$PR_STATE" == "not_found" ]]; then
+              echo "This usually means the PR number is incorrect or the repository is private"
+            fi
             exit 1
           fi
           
           # Extract head SHA and ref
           PR_HEAD_SHA=$(echo "$PR_RESPONSE" | jq -r '.head.sha')
           PR_HEAD_REF=$(echo "$PR_RESPONSE" | jq -r '.head.ref')
+          
+          # Validate extracted values
+          if [[ -z "$PR_HEAD_SHA" || "$PR_HEAD_SHA" == "null" ]]; then
+            echo "❌ Failed to extract PR head SHA"
+            exit 1
+          fi
+          
+          if [[ -z "$PR_HEAD_REF" || "$PR_HEAD_REF" == "null" ]]; then
+            echo "❌ Failed to extract PR head ref"
+            exit 1
+          fi
           
           echo "pr_head_sha=$PR_HEAD_SHA" >> $GITHUB_OUTPUT
           echo "pr_head_ref=$PR_HEAD_REF" >> $GITHUB_OUTPUT
