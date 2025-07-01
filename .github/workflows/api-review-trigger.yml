@@ -331,7 +331,9 @@ jobs:
           if [[ -f "./review-results/summary.md" ]]; then
             SUMMARY_CONTENT=$(cat ./review-results/summary.md)
           else
-            SUMMARY_CONTENT="❌ **API Review Failed**\n\nThe automated review could not be completed. Please check the workflow logs for details."
+            SUMMARY_CONTENT="❌ **API Review Failed**
+
+          The automated review could not be completed. Please check the workflow logs for details."
           fi
           
           # Create comment body with trigger source indicator
@@ -342,24 +344,26 @@ jobs:
             TRIGGER_INFO="**Triggered by**: Manual workflow dispatch"
           fi
           
-          COMMENT_BODY=$(cat << 'EOF'
+          # Create properly formatted comment body using a temp file to preserve formatting
+          cat > comment_body.md << EOF
           ## 🤖 Automated CAMARA API Review Results
           
+          ${TRIGGER_INFO}
+          **Pull Request**: [${{ needs.validate-input.outputs.repo_owner }}/${{ needs.validate-input.outputs.repo_name }}#${{ needs.validate-input.outputs.pr_number }}](${{ needs.validate-input.outputs.pull_request_url }})
+          **Review Type**: ${{ needs.validate-input.outputs.review_type }}
+          **Workflow Run**: [View Details](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          
+          ${SUMMARY_CONTENT}
           EOF
-          )
           
-          COMMENT_BODY="${COMMENT_BODY}\n${TRIGGER_INFO}\n"
-          COMMENT_BODY="${COMMENT_BODY}**Pull Request**: [${{ needs.validate-input.outputs.repo_owner }}/${{ needs.validate-input.outputs.repo_name }}#${{ needs.validate-input.outputs.pr_number }}](${{ needs.validate-input.outputs.pull_request_url }})\n"
-          COMMENT_BODY="${COMMENT_BODY}**Review Type**: ${{ needs.validate-input.outputs.review_type }}\n"
-          COMMENT_BODY="${COMMENT_BODY}**Workflow Run**: [View Details](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n"
-          COMMENT_BODY="${COMMENT_BODY}${SUMMARY_CONTENT}"
+          # Post comment to issue using the properly formatted body
+          COMMENT_JSON=$(jq -n --rawfile body comment_body.md '{body: $body}')
           
-          # Post comment to issue
           curl -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             "${{ github.api_url }}/repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
-            -d "{\"body\":$(echo "$COMMENT_BODY" | jq -Rs .)}"
+            -d "$COMMENT_JSON"
           
           echo "✅ Summary posted to issue #${ISSUE_NUMBER}"
 
