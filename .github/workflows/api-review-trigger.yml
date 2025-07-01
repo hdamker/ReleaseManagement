@@ -184,6 +184,8 @@ jobs:
         run: |
           PR_URL="${{ steps.determine-inputs.outputs.pull_request_url }}"
           
+          echo "🔍 Parsing PR URL: $PR_URL"
+          
           # Validate URL format
           if [[ ! "$PR_URL" =~ ^https://github\.com/[^/]+/[^/]+/pull/[0-9]+/?$ ]]; then
             echo "❌ Invalid PR URL format. Expected: https://github.com/owner/repo/pull/123"
@@ -191,10 +193,25 @@ jobs:
             exit 1
           fi
           
-          # Extract components
+          # Extract components with improved regex
           REPO_OWNER=$(echo "$PR_URL" | sed -n 's|https://github\.com/\([^/]*\)/.*|\1|p')
           REPO_NAME=$(echo "$PR_URL" | sed -n 's|https://github\.com/[^/]*/\([^/]*\)/.*|\1|p')
-          PR_NUMBER=$(echo "$PR_URL" | sed -n 's|.*pull/\([0-9]*\)/?$|\1|p')
+          PR_NUMBER=$(echo "$PR_URL" | sed -n 's|.*/pull/\([0-9][0-9]*\).*|\1|p')
+          
+          # Debug output
+          echo "🔍 Extracted components:"
+          echo "  REPO_OWNER: '$REPO_OWNER'"
+          echo "  REPO_NAME: '$REPO_NAME'"
+          echo "  PR_NUMBER: '$PR_NUMBER'"
+          
+          # Validate extracted components
+          if [[ -z "$REPO_OWNER" || -z "$REPO_NAME" || -z "$PR_NUMBER" ]]; then
+            echo "❌ Failed to extract components from PR URL: $PR_URL"
+            echo "  REPO_OWNER: '$REPO_OWNER'"
+            echo "  REPO_NAME: '$REPO_NAME'"  
+            echo "  PR_NUMBER: '$PR_NUMBER'"
+            exit 1
+          fi
           
           # Additional validation for CAMARA project
           if [[ "$REPO_OWNER" != "camaraproject" ]]; then
@@ -203,11 +220,17 @@ jobs:
             exit 1
           fi
           
+          # Validate PR number is numeric
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "❌ PR number must be numeric, found: '$PR_NUMBER'"
+            exit 1
+          fi
+          
           echo "repo_owner=$REPO_OWNER" >> $GITHUB_OUTPUT
           echo "repo_name=$REPO_NAME" >> $GITHUB_OUTPUT
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
           
-          echo "📝 Parsed PR details:"
+          echo "✅ Parsed PR details:"
           echo "  Repository: $REPO_OWNER/$REPO_NAME"
           echo "  PR Number: $PR_NUMBER"
 
