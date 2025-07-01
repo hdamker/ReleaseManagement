@@ -33,6 +33,15 @@ on:
       pr_head_ref:
         required: true
         type: string
+      pr_head_repo:
+        required: true
+        type: string
+      pr_base_ref:
+        required: true
+        type: string
+      pr_base_repo:
+        required: true
+        type: string
       review_type:
         required: true
         type: string
@@ -53,6 +62,10 @@ jobs:
           echo "Repository: ${{ inputs.repo_owner }}/${{ inputs.repo_name }}"
           echo "PR: #${{ inputs.pr_number }}"
           echo "Head SHA: ${{ inputs.pr_head_sha }}"
+          echo "Head Ref: ${{ inputs.pr_head_ref }}"
+          echo "Head Repo: ${{ inputs.pr_head_repo }}"
+          echo "Base Ref: ${{ inputs.pr_base_ref }}"
+          echo "Base Repo: ${{ inputs.pr_base_repo }}"
           echo "Review Type: ${{ inputs.review_type }}"
           echo "Expected Commonalities: ${{ inputs.commonalities_version }}"
           echo "Workflow Repository: ${{ github.repository }}"
@@ -66,10 +79,49 @@ jobs:
       - name: Checkout Target Repository PR
         uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.repo_owner }}/${{ inputs.repo_name }}
+          repository: ${{ inputs.pr_head_repo }}
           ref: ${{ inputs.pr_head_sha }}
           path: target-repo
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Checkout
+        run: |
+          echo "🔍 Verifying PR branch checkout..."
+          echo "Repository: ${{ inputs.pr_head_repo }}"
+          echo "Expected SHA: ${{ inputs.pr_head_sha }}"
+          echo "Expected Branch: ${{ inputs.pr_head_ref }}"
+          echo ""
+          
+          cd target-repo
+          
+          # Get current commit info
+          CURRENT_SHA=$(git rev-parse HEAD)
+          CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "detached")
+          
+          echo "📋 Checkout Results:"
+          echo "  Current SHA: $CURRENT_SHA"
+          echo "  Current Branch: $CURRENT_BRANCH"
+          echo "  Working Directory: $(pwd)"
+          echo ""
+          
+          # Verify we have the right commit
+          if [[ "$CURRENT_SHA" == "${{ inputs.pr_head_sha }}" ]]; then
+            echo "✅ Successfully checked out PR commit: ${{ inputs.pr_head_sha }}"
+          else
+            echo "❌ SHA mismatch!"
+            echo "  Expected: ${{ inputs.pr_head_sha }}"
+            echo "  Got: $CURRENT_SHA"
+            exit 1
+          fi
+          
+          # Show some recent commits for debugging
+          echo ""
+          echo "📝 Recent commits on this branch:"
+          git log --oneline -n 5 || echo "Could not get git log"
+          
+          echo ""
+          echo "📁 Repository structure:"
+          ls -la | head -10
 
       - name: Setup Python Environment
         uses: actions/setup-python@v4
