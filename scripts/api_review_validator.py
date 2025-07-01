@@ -660,7 +660,7 @@ def generate_report(results: List[ValidationResult], output_dir: str):
         else:
             f.write(f"**Recommendation**: ❌ Address {total_critical} critical issue(s) before release\n")
         
-        f.write("\n📄 **[Download Detailed Report](../../../actions/runs/${{ github.run_id }})** for complete analysis\n")
+        f.write("\n📄 **Detailed Report**: Download the `api-review-detailed-report` artifact from the workflow run for complete analysis\n")
 
 def main():
     """Main function - always exits with success after reporting findings"""
