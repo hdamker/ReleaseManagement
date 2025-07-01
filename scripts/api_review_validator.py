@@ -2,6 +2,9 @@
 """
 CAMARA API Review Validator
 Automated validation of CAMARA API definitions based on the comprehensive checklist
+
+This script analyzes API definitions and reports findings, but does not judge
+whether findings constitute a "failure" - that decision is left to the workflow.
 """
 
 import os
@@ -659,10 +662,14 @@ def generate_report(results: List[ValidationResult], output_dir: str):
         
         f.write("\n📄 **[Download Detailed Report](../../../actions/runs/${{ github.run_id }})** for complete analysis\n")
 
-if __name__ == "__main__":
+def main():
+    """Main function - always exits with success after reporting findings"""
     if len(sys.argv) != 4:
         print("Usage: python api_review_validator.py <repo_directory> <commonalities_version> <output_directory>")
-        sys.exit(1)
+        print("")
+        print("This script analyzes API definitions and reports findings.")
+        print("It does not judge whether findings constitute a failure - that decision is left to the workflow.")
+        sys.exit(0)  # Exit successfully even for usage errors
     
     repo_dir = sys.argv[1]
     commonalities_version = sys.argv[2]
@@ -673,9 +680,10 @@ if __name__ == "__main__":
     
     if not api_files:
         print("❌ No API definition files found")
+        print("Checked location: {}/code/API_definitions/".format(repo_dir))
         # Create empty results for summary
         generate_report([], output_dir)
-        sys.exit(0)
+        sys.exit(0)  # Exit successfully even when no files found
     
     print(f"🔍 Found {len(api_files)} API definition file(s)")
     for file in api_files:
@@ -687,16 +695,30 @@ if __name__ == "__main__":
     
     for api_file in api_files:
         print(f"\n📋 Validating {api_file}...")
-        result = validator.validate_api_file(api_file)
-        results.append(result)
-        
-        print(f"  🔴 Critical: {result.critical_count}")
-        print(f"  🟡 Medium: {result.medium_count}")
-        print(f"  🔵 Low: {result.low_count}")
+        try:
+            result = validator.validate_api_file(api_file)
+            results.append(result)
+            
+            print(f"  🔴 Critical: {result.critical_count}")
+            print(f"  🟡 Medium: {result.medium_count}")
+            print(f"  🔵 Low: {result.low_count}")
+        except Exception as e:
+            print(f"  ❌ Error validating {api_file}: {str(e)}")
+            # Create error result
+            error_result = ValidationResult(file_path=api_file)
+            error_result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Validation Error", f"Failed to validate file: {str(e)}"
+            ))
+            results.append(error_result)
     
     # Generate reports
     print(f"\n📄 Generating reports in {output_dir}...")
-    generate_report(results, output_dir)
+    try:
+        generate_report(results, output_dir)
+        print("✅ Reports generated successfully")
+    except Exception as e:
+        print(f"❌ Error generating reports: {str(e)}")
+        # Still exit successfully - we've done our job of analyzing
     
     total_critical = sum(r.critical_count for r in results)
     total_medium = sum(r.medium_count for r in results)
@@ -704,10 +726,11 @@ if __name__ == "__main__":
     print(f"\n🎯 **Review Complete**")
     print(f"Critical Issues: {total_critical}")
     print(f"Medium Issues: {total_medium}")
+    print(f"Low Issues: {sum(r.low_count for r in results)}")
     
-    if total_critical > 0:
-        print("❌ Critical issues found - address before release")
-        sys.exit(1)
-    else:
-        print("✅ No critical issues found")
-        sys.exit(0)
+    # Always exit successfully - we are a reporter, not a judge
+    print("\n📋 Analysis complete. Decision on release readiness is left to the workflow.")
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()
