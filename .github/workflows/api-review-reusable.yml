@@ -463,26 +463,40 @@ jobs:
           if [[ "${{ needs.validate-commonalities-version.outputs.version_supported }}" == "true" ]]; then
             # Version was supported, use api-review job outputs
             echo "✅ Using outputs from successful API review"
-            SUMMARY_CONTENT="${{ needs.api-review.outputs.summary_content }}"
+            
+            # Set outputs directly without bash variables to avoid command interpretation
+            {
+              echo 'summary_content<<EOF'
+              cat << 'SUMMARY_EOF'
+          ${{ needs.api-review.outputs.summary_content }}
+          SUMMARY_EOF
+              echo 'EOF'
+            } >> $GITHUB_OUTPUT
+            
+            echo "review_status=${{ needs.api-review.outputs.review_status }}" >> $GITHUB_OUTPUT
+            echo "critical_issues_count=${{ needs.api-review.outputs.critical_issues_count }}" >> $GITHUB_OUTPUT
+            
             REVIEW_STATUS="${{ needs.api-review.outputs.review_status }}"
             CRITICAL_ISSUES="${{ needs.api-review.outputs.critical_issues_count }}"
           else
             # Version was not supported, use error handler outputs  
             echo "❌ Using outputs from version error handler"
-            SUMMARY_CONTENT="${{ needs.handle-unsupported-version.outputs.summary_content }}"
+            
+            # Set outputs directly without bash variables to avoid command interpretation
+            {
+              echo 'summary_content<<EOF'
+              cat << 'SUMMARY_EOF'
+          ${{ needs.handle-unsupported-version.outputs.summary_content }}
+          SUMMARY_EOF
+              echo 'EOF'
+            } >> $GITHUB_OUTPUT
+            
+            echo "review_status=error" >> $GITHUB_OUTPUT
+            echo "critical_issues_count=N/A" >> $GITHUB_OUTPUT
+            
             REVIEW_STATUS="error"
             CRITICAL_ISSUES="N/A"
           fi
-          
-          # Set final outputs
-          {
-            echo 'summary_content<<EOF'
-            echo "$SUMMARY_CONTENT"
-            echo 'EOF'
-          } >> $GITHUB_OUTPUT
-          
-          echo "review_status=$REVIEW_STATUS" >> $GITHUB_OUTPUT
-          echo "critical_issues_count=$CRITICAL_ISSUES" >> $GITHUB_OUTPUT
           
           echo ""
           echo "📋 Final Workflow Results:"
