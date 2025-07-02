@@ -841,153 +841,194 @@ def find_api_files(directory: str) -> List[str]:
 
 def generate_report(results: List[ValidationResult], output_dir: str):
     """Generate comprehensive report and summary"""
-    os.makedirs(output_dir, exist_ok=True)
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"📁 Report directory created: {output_dir}")
+    except Exception as e:
+        print(f"❌ Error creating output directory: {str(e)}")
+        raise
     
     # Generate detailed report
-    with open(f"{output_dir}/detailed-report.md", "w") as f:
-        f.write("# CAMARA API Review - Detailed Report (Enhanced for Commonalities 0.6)\n\n")
-        f.write(f"**Generated**: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n")
+    try:
+        detailed_path = f"{output_dir}/detailed-report.md"
+        print(f"📝 Writing detailed report to: {detailed_path}")
         
-        # Summary statistics
-        total_critical = sum(r.critical_count for r in results)
-        total_medium = sum(r.medium_count for r in results)
-        total_low = sum(r.low_count for r in results)
-        
-        f.write("## Summary\n\n")
-        f.write(f"- **APIs Reviewed**: {len(results)}\n")
-        f.write(f"- **Critical Issues**: {total_critical}\n")
-        f.write(f"- **Medium Issues**: {total_medium}\n")
-        f.write(f"- **Low Priority Issues**: {total_low}\n\n")
-        
-        # Detailed results for each API
-        for result in results:
-            f.write(f"## {result.api_name} (v{result.version})\n\n")
-            f.write(f"**File**: `{result.file_path}`\n\n")
+        with open(detailed_path, "w") as f:
+            f.write("# CAMARA API Review - Detailed Report (Enhanced for Commonalities 0.6)\n\n")
+            f.write(f"**Generated**: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n")
             
-            if result.issues:
-                # Group issues by severity
-                critical_issues = [i for i in result.issues if i.severity == Severity.CRITICAL]
-                medium_issues = [i for i in result.issues if i.severity == Severity.MEDIUM]
-                low_issues = [i for i in result.issues if i.severity == Severity.LOW]
+            # Summary statistics
+            total_critical = sum(r.critical_count for r in results)
+            total_medium = sum(r.medium_count for r in results)
+            total_low = sum(r.low_count for r in results)
+            
+            f.write("## Summary\n\n")
+            f.write(f"- **APIs Reviewed**: {len(results)}\n")
+            f.write(f"- **Critical Issues**: {total_critical}\n")
+            f.write(f"- **Medium Issues**: {total_medium}\n")
+            f.write(f"- **Low Priority Issues**: {total_low}\n\n")
+            
+            # Detailed results for each API
+            for result in results:
+                f.write(f"## {result.api_name} (v{result.version})\n\n")
+                f.write(f"**File**: `{result.file_path}`\n\n")
                 
-                for severity, issues in [
-                    ("🔴 Critical Issues", critical_issues),
-                    ("🟡 Medium Priority Issues", medium_issues),
-                    ("🔵 Low Priority Issues", low_issues)
-                ]:
-                    if issues:
-                        f.write(f"### {severity}\n\n")
-                        for issue in issues:
-                            f.write(f"**{issue.category}**: {issue.description}\n")
-                            if issue.location:
-                                f.write(f"- **Location**: `{issue.location}`\n")
-                            if issue.fix_suggestion:
-                                f.write(f"- **Fix**: {issue.fix_suggestion}\n")
-                            f.write("\n")
-            else:
-                f.write("✅ **No issues found**\n\n")
-            
-            # Checks performed
-            f.write("### Automated Checks Performed\n\n")
-            for check in result.checks_performed:
-                f.write(f"- {check}\n")
-            
-            # Manual checks needed
-            f.write("\n### Manual Review Required\n\n")
-            for check in result.manual_checks_needed:
-                f.write(f"- {check}\n")
-            
-            f.write("\n---\n\n")
-    
-    # Generate summary for GitHub comment
-    with open(f"{output_dir}/summary.md", "w") as f:
-        if not results:
-            f.write("❌ **No API definition files found**\n\n")
-            f.write("Please ensure YAML files are located in `/code/API_definitions/`\n")
-            return
-        
-        total_critical = sum(r.critical_count for r in results)
-        total_medium = sum(r.medium_count for r in results)
-        
-        # Overall status
-        if total_critical == 0:
-            if total_medium == 0:
-                status = "✅ **Ready for Release**"
-            else:
-                status = "⚠️ **Conditional Approval**"
-        else:
-            status = "❌ **Critical Issues Found**"
-        
-        f.write(f"### {status}\n\n")
-        
-        # APIs found
-        f.write("**APIs Reviewed**:\n")
-        for result in results:
-            f.write(f"- `{result.api_name}` v{result.version}\n")
-        f.write("\n")
-        
-        # Issue summary
-        f.write("**Issues Summary**:\n")
-        f.write(f"- 🔴 Critical: {total_critical}\n")
-        f.write(f"- 🟡 Medium: {total_medium}\n")
-        f.write(f"- 🔵 Low: {sum(r.low_count for r in results)}\n\n")
-        
-        # Enhanced issues detail with smart medium issue inclusion
-        if total_critical > 0 or (total_critical + total_medium < 10 and total_medium > 0):
-            # Determine what to show based on count
-            if total_critical + total_medium < 10:
-                # Show both critical and medium when total is manageable
-                f.write("**Issues Requiring Attention**:\n")
-                
-                # Show critical issues first
-                for result in results:
+                if result.issues:
+                    # Group issues by severity
                     critical_issues = [i for i in result.issues if i.severity == Severity.CRITICAL]
                     medium_issues = [i for i in result.issues if i.severity == Severity.MEDIUM]
+                    low_issues = [i for i in result.issues if i.severity == Severity.LOW]
                     
-                    if critical_issues or medium_issues:
-                        f.write(f"\n*{result.api_name}*:\n")
-                        
-                        # Show all critical issues
-                        for issue in critical_issues:
-                            f.write(f"- 🔴 **{issue.category}**: {issue.description}\n")
-                        
-                        # Show medium issues if space allows
-                        remaining_slots = 10 - total_critical
-                        medium_to_show = min(len(medium_issues), remaining_slots)
-                        
-                        for issue in medium_issues[:medium_to_show]:
-                            f.write(f"- 🟡 **{issue.category}**: {issue.description}\n")
-                        
-                        if len(medium_issues) > medium_to_show:
-                            f.write(f"- 🟡 ... and {len(medium_issues) - medium_to_show} more medium priority issues\n")
-            else:
-                # Only show critical issues when there are too many total issues
-                f.write("**Critical Issues Requiring Immediate Attention**:\n")
-                for result in results:
-                    critical_issues = [i for i in result.issues if i.severity == Severity.CRITICAL]
-                    if critical_issues:
-                        f.write(f"\n*{result.api_name}*:\n")
-                        for issue in critical_issues[:3]:  # Limit to first 3
-                            f.write(f"- {issue.category}: {issue.description}\n")
-                        if len(critical_issues) > 3:
-                            f.write(f"- ... and {len(critical_issues) - 3} more\n")
+                    for severity, issues in [
+                        ("🔴 Critical Issues", critical_issues),
+                        ("🟡 Medium Priority Issues", medium_issues),
+                        ("🔵 Low Priority Issues", low_issues)
+                    ]:
+                        if issues:
+                            f.write(f"### {severity}\n\n")
+                            for issue in issues:
+                                f.write(f"**{issue.category}**: {issue.description}\n")
+                                if issue.location:
+                                    f.write(f"- **Location**: `{issue.location}`\n")
+                                if issue.fix_suggestion:
+                                    f.write(f"- **Fix**: {issue.fix_suggestion}\n")
+                                f.write("\n")
+                else:
+                    f.write("✅ **No issues found**\n\n")
                 
-                # Add note about medium issues
-                if total_medium > 0:
-                    f.write(f"\n*Note: {total_medium} medium priority issues also found. See detailed report for complete list.*\n")
+                # Checks performed
+                f.write("### Automated Checks Performed\n\n")
+                for check in result.checks_performed:
+                    f.write(f"- {check}\n")
+                
+                # Manual checks needed
+                f.write("\n### Manual Review Required\n\n")
+                for check in result.manual_checks_needed:
+                    f.write(f"- {check}\n")
+                
+                f.write("\n---\n\n")
+        
+        print("✅ Detailed report written successfully")
+    except Exception as e:
+        print(f"❌ Error writing detailed report: {str(e)}")
+        # Don't raise here, continue to summary
+    
+    # Generate summary for GitHub comment
+    try:
+        summary_path = f"{output_dir}/summary.md"
+        print(f"📝 Writing summary report to: {summary_path}")
+        
+        with open(summary_path, "w") as f:
+            if not results:
+                f.write("❌ **No API definition files found**\n\n")
+                f.write("Please ensure YAML files are located in `/code/API_definitions/`\n")
+                print("📄 Empty results summary written")
+                return
             
+            total_critical = sum(r.critical_count for r in results)
+            total_medium = sum(r.medium_count for r in results)
+            
+            # Overall status
+            if total_critical == 0:
+                if total_medium == 0:
+                    status = "✅ **Ready for Release**"
+                else:
+                    status = "⚠️ **Conditional Approval**"
+            else:
+                status = "❌ **Critical Issues Found**"
+            
+            f.write(f"### {status}\n\n")
+            
+            # APIs found
+            f.write("**APIs Reviewed**:\n")
+            for result in results:
+                f.write(f"- `{result.api_name}` v{result.version}\n")
             f.write("\n")
+            
+            # Issue summary
+            f.write("**Issues Summary**:\n")
+            f.write(f"- 🔴 Critical: {total_critical}\n")
+            f.write(f"- 🟡 Medium: {total_medium}\n")
+            f.write(f"- 🔵 Low: {sum(r.low_count for r in results)}\n\n")
+            
+            # Enhanced issues detail with smart medium issue inclusion
+            if total_critical > 0 or (total_critical + total_medium < 10 and total_medium > 0):
+                # Determine what to show based on count
+                if total_critical + total_medium < 10:
+                    # Show both critical and medium when total is manageable
+                    f.write("**Issues Requiring Attention**:\n")
+                    
+                    # Show critical issues first
+                    for result in results:
+                        critical_issues = [i for i in result.issues if i.severity == Severity.CRITICAL]
+                        medium_issues = [i for i in result.issues if i.severity == Severity.MEDIUM]
+                        
+                        if critical_issues or medium_issues:
+                            f.write(f"\n*{result.api_name}*:\n")
+                            
+                            # Show all critical issues
+                            for issue in critical_issues:
+                                f.write(f"- 🔴 **{issue.category}**: {issue.description}\n")
+                            
+                            # Show medium issues if space allows
+                            remaining_slots = 10 - total_critical
+                            medium_to_show = min(len(medium_issues), remaining_slots)
+                            
+                            for issue in medium_issues[:medium_to_show]:
+                                f.write(f"- 🟡 **{issue.category}**: {issue.description}\n")
+                            
+                            if len(medium_issues) > medium_to_show:
+                                f.write(f"- 🟡 ... and {len(medium_issues) - medium_to_show} more medium priority issues\n")
+                else:
+                    # Only show critical issues when there are too many total issues
+                    f.write("**Critical Issues Requiring Immediate Attention**:\n")
+                    for result in results:
+                        critical_issues = [i for i in result.issues if i.severity == Severity.CRITICAL]
+                        if critical_issues:
+                            f.write(f"\n*{result.api_name}*:\n")
+                            for issue in critical_issues[:3]:  # Limit to first 3
+                                f.write(f"- {issue.category}: {issue.description}\n")
+                            if len(critical_issues) > 3:
+                                f.write(f"- ... and {len(critical_issues) - 3} more\n")
+                    
+                    # Add note about medium issues
+                    if total_medium > 0:
+                        f.write(f"\n*Note: {total_medium} medium priority issues also found. See detailed report for complete list.*\n")
+                
+                f.write("\n")
+            
+            # Recommendation
+            if total_critical == 0 and total_medium == 0:
+                f.write("**Recommendation**: ✅ Approved for release\n")
+            elif total_critical == 0:
+                f.write("**Recommendation**: ⚠️ Approved with medium-priority improvements recommended\n")
+            else:
+                f.write(f"**Recommendation**: ❌ Address {total_critical} critical issue(s) before release\n")
+            
+            f.write("\n📄 **Detailed Report**: Download the `api-review-detailed-report` artifact from the workflow run for complete analysis\n")
+            f.write("\n🔍 **Enhanced Validation**: This review includes Commonalities 0.6 compliance and event subscription validation\n")
         
-        # Recommendation
-        if total_critical == 0 and total_medium == 0:
-            f.write("**Recommendation**: ✅ Approved for release\n")
-        elif total_critical == 0:
-            f.write("**Recommendation**: ⚠️ Approved with medium-priority improvements recommended\n")
-        else:
-            f.write(f"**Recommendation**: ❌ Address {total_critical} critical issue(s) before release\n")
+        print("✅ Summary report written successfully")
         
-        f.write("\n📄 **Detailed Report**: Download the `api-review-detailed-report` artifact from the workflow run for complete analysis\n")
-        f.write("\n🔍 **Enhanced Validation**: This review includes Commonalities 0.6 compliance and event subscription validation\n")
+    except Exception as e:
+        print(f"❌ Error writing summary report: {str(e)}")
+        # Create a minimal fallback summary
+        try:
+            fallback_summary = f"{output_dir}/summary.md"
+            with open(fallback_summary, "w") as f:
+                f.write("❌ **API Review Error**\n\n")
+                f.write(f"Report generation encountered an error: {str(e)}\n\n")
+                if results:
+                    total_critical = sum(r.critical_count for r in results)
+                    total_medium = sum(r.medium_count for r in results)
+                    f.write(f"**Partial Results**:\n")
+                    f.write(f"- APIs Found: {len(results)}\n")
+                    f.write(f"- Critical Issues: {total_critical}\n")
+                    f.write(f"- Medium Issues: {total_medium}\n")
+            print("📄 Fallback summary created")
+        except Exception as fallback_error:
+            print(f"❌ Fallback summary also failed: {str(fallback_error)}")
+            raise
 
 def main():
     """Main function - always exits with success after reporting findings"""
@@ -1002,14 +1043,23 @@ def main():
     commonalities_version = sys.argv[2]
     output_dir = sys.argv[3]
     
+    print(f"🚀 Starting CAMARA API validation (Commonalities {commonalities_version})")
+    print(f"📁 Repository directory: {repo_dir}")
+    print(f"📊 Output directory: {output_dir}")
+    
     # Find API files
     api_files = find_api_files(repo_dir)
     
     if not api_files:
         print("❌ No API definition files found")
         print("Checked location: {}/code/API_definitions/".format(repo_dir))
+        print("📄 Creating empty results report...")
         # Create empty results for summary
-        generate_report([], output_dir)
+        try:
+            generate_report([], output_dir)
+            print("✅ Empty report generated successfully")
+        except Exception as e:
+            print(f"❌ Error generating empty report: {str(e)}")
         sys.exit(0)  # Exit successfully even when no files found
     
     print(f"🔍 Found {len(api_files)} API definition file(s)")
@@ -1045,14 +1095,41 @@ def main():
             ))
             results.append(error_result)
     
+    print(f"\n📊 Validation analysis completed")
+    
     # Generate reports
-    print(f"\n📄 Generating reports in {output_dir}...")
+    print(f"📄 Generating reports in {output_dir}...")
     try:
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
         generate_report(results, output_dir)
-        print("✅ Reports generated successfully")
+        
+        # Verify summary was created
+        summary_path = os.path.join(output_dir, "summary.md")
+        if os.path.exists(summary_path):
+            print("✅ Summary report generated successfully")
+        else:
+            print("❌ Summary report not created - check generate_report function")
+            
+        detailed_path = os.path.join(output_dir, "detailed-report.md")
+        if os.path.exists(detailed_path):
+            print("✅ Detailed report generated successfully")
+        else:
+            print("❌ Detailed report not created")
+            
     except Exception as e:
         print(f"❌ Error generating reports: {str(e)}")
-        # Still exit successfully - we've done our job of analyzing
+        import traceback
+        print(f"📋 Traceback: {traceback.format_exc()}")
+        
+        # Create minimal fallback report
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+            with open(os.path.join(output_dir, "summary.md"), "w") as f:
+                f.write("❌ **API Review Failed**\n\nReport generation error occurred.\n")
+            print("📄 Fallback summary report created")
+        except Exception as fallback_error:
+            print(f"❌ Even fallback report failed: {str(fallback_error)}")
     
     total_critical = sum(r.critical_count for r in results)
     total_medium = sum(r.medium_count for r in results)
