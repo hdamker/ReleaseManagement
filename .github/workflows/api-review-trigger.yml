@@ -1,10 +1,15 @@
 # .github/workflows/api-review-trigger.yml
 # 
-# CAMARA API Review Trigger Workflow
+# CAMARA API Review Trigger Workflow (Version-Specific)
 # 
 # Purpose: Entry point for automated CAMARA API compliance reviews. Can be triggered by:
 #   - Issue comments starting with "/rc-api-review" (extracts PR URL from issue description)
 #   - Manual workflow dispatch with custom parameters
+# 
+# Updates:
+#   - Validates Commonalities version support (currently only 0.6)
+#   - Uses version-specific validator scripts
+#   - Enhanced error handling for unsupported versions
 # 
 # This workflow validates inputs and calls the reusable review workflow.
 # 
@@ -34,10 +39,15 @@ on:
           - 'alpha'
           - 'public-release'
       commonalities_version:
-        description: 'Expected CAMARA Commonalities version (e.g., 0.6, 0.7)'
+        description: 'CAMARA Commonalities version (currently only 0.6 is supported)'
         required: false
         default: '0.6'
-        type: string
+        type: choice
+        options:
+          - '0.6'
+          - '0.7'
+          - '0.8'
+          - '1.0'
   issue_comment:
     types: [created]
 
@@ -112,7 +122,7 @@ jobs:
           
           echo "✅ Found PR URL: $PR_URL"
           
-          # Set outputs
+          # Set outputs with version-aware defaults
           echo "pull_request_url=$PR_URL" >> $GITHUB_OUTPUT
           echo "issue_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
           echo "review_type=release-candidate" >> $GITHUB_OUTPUT
@@ -120,7 +130,7 @@ jobs:
           
           echo "📝 Using defaults:"
           echo "  Review Type: release-candidate"
-          echo "  Commonalities Version: 0.6"
+          echo "  Commonalities Version: 0.6 (currently supported)"
           echo "  Issue Number: ${{ github.event.issue.number }}"
 
       - name: Acknowledge Comment
@@ -136,6 +146,10 @@ jobs:
           - Pull Request: ${{ steps.extract.outputs.pull_request_url }}
           - Review Type: ${{ steps.extract.outputs.review_type }}
           - Commonalities Version: ${{ steps.extract.outputs.commonalities_version }}
+          
+          **Version Support:**
+          - ✅ Commonalities 0.6: Fully supported
+          - ⏳ Commonalities 0.7+: Coming soon
           
           Results will be posted here when the review completes.
           EOF
@@ -183,6 +197,32 @@ jobs:
             echo "review_type=${{ needs.check-comment-trigger.outputs.review_type || 'release-candidate' }}" >> $GITHUB_OUTPUT
             echo "commonalities_version=${{ needs.check-comment-trigger.outputs.commonalities_version || '0.6' }}" >> $GITHUB_OUTPUT
           fi
+          
+          echo ""
+          echo "📋 Final Input Parameters:"
+          echo "  Commonalities Version: ${{ steps.determine-inputs.outputs.commonalities_version }}"
+          echo "  Review Type: ${{ steps.determine-inputs.outputs.review_type }}"
+
+      - name: Validate Commonalities Version Early
+        run: |
+          COMMONALITIES_VERSION="${{ steps.determine-inputs.outputs.commonalities_version }}"
+          
+          echo "🔍 Pre-validating Commonalities version: $COMMONALITIES_VERSION"
+          
+          case "$COMMONALITIES_VERSION" in
+            "0.6")
+              echo "✅ Commonalities 0.6 is supported - proceeding with validation"
+              ;;
+            "0.7"|"0.8"|"0.9"|"1.0")
+              echo "⚠️ Commonalities $COMMONALITIES_VERSION is not yet supported"
+              echo "The workflow will handle this gracefully and provide an informative error"
+              ;;
+            *)
+              echo "❌ Invalid Commonalities version: $COMMONALITIES_VERSION"
+              echo "Valid options: 0.6 (supported), 0.7, 0.8, 1.0 (coming soon)"
+              exit 1
+              ;;
+          esac
 
       - name: Parse PR URL
         id: parse
@@ -355,6 +395,7 @@ jobs:
           **Debug Information:**
           - Review Status: ${{ needs.call-review-workflow.outputs.review_status }}
           - Critical Issues: ${{ needs.call-review-workflow.outputs.critical_issues_count }}
+          - Commonalities Version: ${{ needs.validate-input.outputs.commonalities_version }}
           FALLBACK_EOF
           fi
           
@@ -384,12 +425,29 @@ jobs:
           ${TRIGGER_INFO}
           **Pull Request**: [${{ needs.validate-input.outputs.repo_owner }}/${{ needs.validate-input.outputs.repo_name }}#${{ needs.validate-input.outputs.pr_number }}](${{ needs.validate-input.outputs.pull_request_url }})
           **Review Type**: ${{ needs.validate-input.outputs.review_type }}
+          **Commonalities Version**: ${{ needs.validate-input.outputs.commonalities_version }}
           **Workflow Run**: [View Details](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
           
           EOF
           
           # Append the summary content from the file
           cat summary_content.md >> comment_body.md
+          
+          # Add version-specific information if there were version issues
+          if [[ "${{ needs.call-review-workflow.outputs.review_status }}" == "error" ]]; then
+            cat >> comment_body.md << EOF
+          
+          ---
+          
+          **📋 Supported Versions:**
+          - ✅ **Commonalities 0.6**: Fully supported with \`api_review_validator_v0_6.py\`
+          - 📅 **Commonalities 0.7+**: Support planned for future releases
+          
+          **🔧 How to fix:**
+          - For current reviews: Use \`commonalities_version: 0.6\`
+          - For future versions: Wait for validator script updates
+          EOF
+          fi
           
           # Debug: Show what we're about to post
           echo "📋 Final comment content:"
@@ -424,6 +482,7 @@ jobs:
           
           # Log additional debug information
           echo "📋 Debug Summary:"
+          echo "  Commonalities Version: ${{ needs.validate-input.outputs.commonalities_version }}"
           echo "  Review Status: ${{ needs.call-review-workflow.outputs.review_status }}"
           echo "  Critical Issues: ${{ needs.call-review-workflow.outputs.critical_issues_count }}"
           echo "  Comment Length: $(wc -c < comment_body.md) characters"
@@ -450,12 +509,18 @@ jobs:
           
           ${TRIGGER_INFO}
           **Pull Request**: ${{ needs.validate-input.outputs.pull_request_url }}
+          **Commonalities Version**: ${{ needs.validate-input.outputs.commonalities_version }}
           **Workflow Run**: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
           
           **Error Details:**
           - Reusable workflow failed to execute
           - Check the workflow logs for detailed error information
-          - This may be due to script errors, missing dependencies, or GitHub Actions issues
+          - This may be due to version compatibility, missing scripts, or GitHub Actions issues
+          
+          **Troubleshooting:**
+          1. Verify Commonalities version is supported (currently: 0.6)
+          2. Check that \`api_review_validator_v0_6.py\` exists in workflow repository
+          3. Review workflow logs for specific error messages
           
           Please check the workflow logs and retry the review.
           EOF
