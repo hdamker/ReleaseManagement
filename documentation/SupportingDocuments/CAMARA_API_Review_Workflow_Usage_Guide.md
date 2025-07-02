@@ -6,6 +6,8 @@
 
 This GitHub workflow system provides automated validation of CAMARA API definitions against the comprehensive review checklist. It can be triggered in two ways: **automatically via issue comments** or **manually via workflow dispatch** from the ReleaseManagement repository to review pull requests in any CAMARA project repository.
 
+The system uses **version-specific validators** to ensure compatibility with different CAMARA Commonalities releases, providing accurate validation rules for each version.
+
 ## Quick Start (Recommended Method)
 
 **For most release reviews, use the comment trigger:**
@@ -34,39 +36,54 @@ This GitHub workflow system provides automated validation of CAMARA API definiti
 | **User Permission** | Anyone who can comment on issues | Users with Actions workflow permissions |
 | **Audit Trail** | Visible in issue comments | Visible in Actions history |
 
+## Version Support
+
+The workflow supports different CAMARA Commonalities versions with dedicated validation logic:
+
+| Commonalities Version | Validator Script | Status | Key Validation Rules |
+|----------------------|------------------|---------|---------------------|
+| **0.6** | `api_review_validator_v0_6.py` | ✅ **Supported** | - Updated XCorrelator pattern<br>- UNAUTHENTICATED (not AUTHENTICATION_REQUIRED)<br>- No IDENTIFIER_MISMATCH<br>- Mandatory description templates |
+| **0.7** | `api_review_validator_v0_7.py` | 📅 **Planned** | Future Commonalities 0.7 requirements |
+| **0.8** | `api_review_validator_v0_8.py` | 📅 **Planned** | Future Commonalities 0.8 requirements |
+| **1.0** | `api_review_validator_v1_0.py` | 📅 **Planned** | Future Commonalities 1.0 requirements |
+
 ## Architecture
 
 ```
 ReleaseManagement Repo (Trigger & Reusable Workflows)
     ↓ Manual Dispatch or Comment Trigger
-┌─────────────────────────────────┐
-│  api-review-trigger.yml         │
-│  - Validates inputs             │
-│  - Calls reusable workflow      │
-│  - Posts results to issue       │
-└─────────────────────────────────┘
+┌─────────────────────────────────────────┐
+│  api-review-trigger.yml                 │
+│  - Validates inputs                     │
+│  - Validates version support            │
+│  - Calls reusable workflow              │
+│  - Posts results to issue               │
+└─────────────────────────────────────────┘
     ↓ Calls
-┌─────────────────────────────────┐
-│  api-review-reusable.yml        │
-│  - Checks out workflow repo     │
-│  - Checks out PR branch         │
-│  - Runs validation script       │
-│  - Generates reports            │
-│  - Creates artifacts            │
-└─────────────────────────────────┘
-    ↓ Uses
-┌─────────────────────────────────┐
-│  /scripts/api_review_validator.py │
-│  - CAMARA API validation logic  │
-│  - Must be in workflow repo     │
-└─────────────────────────────────┘
+┌─────────────────────────────────────────┐
+│  api-review-reusable.yml                │
+│  - Validates Commonalities version      │
+│  - Loads version-specific validator     │
+│  - Checks out workflow repo             │
+│  - Checks out PR branch                 │
+│  - Runs validation script               │
+│  - Generates reports                    │
+│  - Creates artifacts                    │
+└─────────────────────────────────────────┘
+    ↓ Uses Version-Specific Script
+┌─────────────────────────────────────────┐
+│  /scripts/api_review_validator_v0_6.py  │
+│  - Commonalities 0.6 validation logic  │
+│  - Version-specific rules               │
+│  - Must be in workflow repository       │
+└─────────────────────────────────────────┘
 ```
 
 ## Setup Instructions
 
-### 1. Install Workflows and Script in ReleaseManagement Repository
+### 1. Install Components in ReleaseManagement Repository
 
-Place the workflow files and validation script in the `.github/workflows/` and `/scripts/` directories:
+Place the workflow files and validation scripts in the appropriate directories:
 
 ```
 ReleaseManagement/
@@ -75,13 +92,15 @@ ReleaseManagement/
 │       ├── api-review-trigger.yml      # Main trigger workflow
 │       └── api-review-reusable.yml     # Reusable validation workflow
 ├── scripts/
-│   └── api_review_validator.py         # REQUIRED: Python validation script
+│   ├── api_review_validator_v0_6.py    # REQUIRED: Commonalities 0.6 validator
+│   ├── api_review_validator_v0_7.py    # Future: Commonalities 0.7 validator
+│   └── api_review_validator_v1_0.py    # Future: Commonalities 1.0 validator
 └── documentation/
     └── SupportingDocuments/
         └── CAMARA_API_Review_Workflow_Usage_Guide.md  # This guide
 ```
 
-**⚠️ CRITICAL REQUIREMENT**: The `api_review_validator.py` script **MUST** be present in the `/scripts/` directory of the repository where the workflows are defined. The workflow will fail if this script is missing.
+**⚠️ CRITICAL REQUIREMENT**: Version-specific validator scripts **MUST** be present in the `/scripts/` directory. The workflow will fail with a helpful error message if the required script for the specified Commonalities version is missing.
 
 ### 2. Required Permissions
 
@@ -102,13 +121,14 @@ The workflows use `secrets.GITHUB_TOKEN` which should have sufficient permission
 
 The reusable workflow is **self-contained** and looks for its dependencies in the **same repository where it's defined**:
 
-- ✅ **Workflow Repository** (`${{ github.repository }}`): Contains the workflows and validation script
+- ✅ **Workflow Repository** (`${{ github.repository }}`): Contains workflows and validation scripts
 - ✅ **Target Repository**: The CAMARA project repository being reviewed
+- ✅ **Version-Specific Scripts**: Each Commonalities version has its own validator
 - ✅ **Separation Ready**: Trigger and reusable workflows can be in different repositories
 
 **Example**:
-- Workflows run from: `hdamker/ReleaseManagement`
-- Script expected at: `hdamker/ReleaseManagement/scripts/api_review_validator.py`
+- Workflows run from: `camaraproject/ReleaseManagement`
+- Script expected at: `camaraproject/ReleaseManagement/scripts/api_review_validator_v0_6.py`
 - Target review: `camaraproject/QualityOnDemand/pull/456`
 
 ## Usage Instructions
@@ -141,6 +161,7 @@ Please review the API definitions and provide feedback.
 2. The workflow will automatically:
    - Extract the PR URL from the issue description (lines 3-4)
    - Use default values: `review_type=release-candidate`, `commonalities_version=0.6`
+   - Load the appropriate version-specific validator script
    - Post results back to the same issue
 
 **Example comment:**
@@ -157,7 +178,7 @@ Please run the automated review for the latest changes.
 
 #### Step 3: Monitor Results
 
-1. The bot will immediately post an acknowledgment comment
+1. The bot will immediately post an acknowledgment comment with version information
 2. Review results will be posted to the same issue when complete
 3. Detailed reports are available as workflow artifacts
 
@@ -187,10 +208,16 @@ For more control over parameters or when the issue format doesn't match expectat
    Pull Request URL: https://github.com/camaraproject/QualityOnDemand/pull/456
    Issue Number: 123
    Review Type: release-candidate
-   Commonalities Version: 0.6
+   Commonalities Version: 0.6  (select from dropdown)
    ```
 
 5. Click **"Run workflow"**
+
+**Available Commonalities Versions:**
+- ✅ `0.6` - Fully supported
+- ⏳ `0.7` - Shows helpful error message
+- ⏳ `0.8` - Shows helpful error message  
+- ⏳ `1.0` - Shows helpful error message
 
 ### Monitor Execution and Review Results
 
@@ -199,16 +226,19 @@ Both trigger methods follow the same execution and results process:
 #### Workflow Execution
 1. Watch the workflow execution in the Actions tab (for manual triggers) or wait for completion (for comment triggers)
 2. The workflow will:
+   - Validate the Commonalities version support
    - Validate the PR URL and check PR status
    - Check out the workflow repository (for validation script)
+   - Load the version-specific validator script
    - Check out the PR branch (target repository)
    - Find API definition files in `/code/API_definitions/`
-   - Run comprehensive validation checks
+   - Run comprehensive validation checks using the correct validator
    - Generate reports
 
 #### Automatic Issue Comment
 A summary will be automatically posted to the specified issue, including:
 - Trigger method (comment by user or manual dispatch)
+- Commonalities version and validator used
 - List of APIs found and their versions
 - Count of critical, medium, and low priority issues
 - Summary of critical issues requiring immediate attention
@@ -217,7 +247,7 @@ A summary will be automatically posted to the specified issue, including:
 #### Detailed Report Download
 1. Go to the workflow run page (link provided in issue comment)
 2. Scroll to **"Artifacts"** section
-3. Download **"api-review-detailed-report"**
+3. Download **"api-review-detailed-report-{version}"** (e.g., `api-review-detailed-report-0.6`)
 4. Open `detailed-report.md` for complete analysis
 
 ## Comment Trigger Examples
@@ -290,6 +320,10 @@ Starting automated CAMARA API review...
 - Review Type: release-candidate
 - Commonalities Version: 0.6
 
+**Version Support:**
+- ✅ Commonalities 0.6: Fully supported
+- ⏳ Commonalities 0.7+: Coming soon
+
 Results will be posted here when the review completes.
 ```
 
@@ -300,6 +334,7 @@ Results will be posted here when the review completes.
 **Triggered by**: Comment `/rc-api-review` by @release-manager
 **Pull Request**: [camaraproject/QualityOnDemand#456](https://github.com/camaraproject/QualityOnDemand/pull/456)
 **Review Type**: release-candidate
+**Commonalities Version**: 0.6
 **Workflow Run**: [View Details](...)
 
 ### ⚠️ **Conditional Approval**
@@ -319,7 +354,36 @@ Results will be posted here when the review completes.
 
 **Recommendation**: ❌ Address 1 critical issue(s) before release
 
-📄 **[Download Detailed Report](...)** for complete analysis
+📄 **Detailed Report**: Download the `api-review-detailed-report-0.6` artifact from the workflow run for complete analysis
+```
+
+**Unsupported version error:**
+```
+## 🤖 Automated CAMARA API Review Results
+
+**Triggered by**: Manual workflow dispatch
+**Pull Request**: [camaraproject/QualityOnDemand#456](...)
+**Review Type**: release-candidate
+**Commonalities Version**: 0.7
+**Workflow Run**: [View Details](...)
+
+### ❌ **Unsupported Commonalities Version**
+
+**Error**: Commonalities version 0.7 is not yet supported. Currently supported versions: 0.6
+
+**Requested Version**: `0.7`
+**Currently Supported**: `0.6`
+
+**What to do:**
+1. **For Commonalities 0.6**: Change the version parameter to `0.6`
+2. **For other versions**: Wait for support to be added or contact the maintainers
+
+**Upcoming Support:**
+- 📅 Commonalities 0.7: Planned
+- 📅 Commonalities 0.8: Planned  
+- 📅 Commonalities 1.0: Planned
+
+**Manual Review Required**: Please use the manual review process for unsupported Commonalities versions.
 ```
 
 ## Supported Review Types
@@ -341,24 +405,27 @@ Results will be posted here when the review completes.
 
 ## What Gets Checked Automatically
 
-### ✅ **Critical Compliance Checks**
+### Version-Specific Validation (Commonalities 0.6)
+
+#### ✅ **Critical Compliance Checks**
 - OpenAPI 3.0.3 specification compliance
 - Info object validation (title, version, license)
 - Server URL format for version type
 - ExternalDocs object presence
 - Security schemes validation
-- Forbidden error codes (IDENTIFIER_MISMATCH, AUTHENTICATION_REQUIRED)
-- X-correlator pattern compliance
+- **Forbidden error codes**: IDENTIFIER_MISMATCH, AUTHENTICATION_REQUIRED
+- **Required error codes**: UNAUTHENTICATED (instead of AUTHENTICATION_REQUIRED)
+- **X-correlator pattern**: `^[a-zA-Z0-9-_:;.\/<>{}]{0,256}$`
 - Mandatory description templates
 
-### ✅ **Medium Priority Checks**
+#### ✅ **Medium Priority Checks**
 - RFC 3339 descriptions for date-time fields
 - Reserved words usage
 - File naming conventions
 - License and commonalities version alignment
 - Device schema compliance (if applicable)
 
-### ✅ **Low Priority Checks**
+#### ✅ **Low Priority Checks**
 - Code style and naming conventions
 - Schema completeness
 - Documentation quality indicators
@@ -387,6 +454,7 @@ Commonalities Version: 0.6
 
 **Pull Request**: [camaraproject/DedicatedNetworks#42](https://github.com/camaraproject/DedicatedNetworks/pull/42)
 **Review Type**: release-candidate
+**Commonalities Version**: 0.6
 **Workflow Run**: [View Details](...)
 
 ### ⚠️ **Conditional Approval**
@@ -412,28 +480,44 @@ Commonalities Version: 0.6
 
 **Recommendation**: ❌ Address 3 critical issue(s) before release
 
-📄 **[Download Detailed Report](...)** for complete analysis
+📄 **Detailed Report**: Download the `api-review-detailed-report-0.6` artifact from the workflow run for complete analysis
 ```
 
 ## Troubleshooting
 
-### Script Missing Issues
+### Version-Specific Issues
 
-#### "❌ API Validator script not found!"
-This is the most common issue. The error message will show:
+#### "❌ Version-specific API Validator script not found!"
+This is the most common issue when the required validator script is missing:
 
 ```
-❌ API Validator script not found!
-Expected location: review-tools/scripts/api_review_validator.py
-Workflow repository: hdamker/ReleaseManagement
-Please ensure the api_review_validator.py script exists at:
-  hdamker/ReleaseManagement/scripts/api_review_validator.py
+❌ Version-specific API Validator script not found!
+Expected location: review-tools/scripts/api_review_validator_v0_6.py
+Workflow repository: camaraproject/ReleaseManagement
+Commonalities version: 0.6
+
+📋 Supported Commonalities versions and their scripts:
+  - 0.6: api_review_validator_v0_6.py
+  - Future versions will have their own scripts
 ```
 
 **Solutions:**
-1. **Check script location**: Ensure `api_review_validator.py` exists at `/scripts/api_review_validator.py` in your workflow repository
+1. **Check script location**: Ensure `api_review_validator_v0_6.py` exists at `/scripts/api_review_validator_v0_6.py` in your workflow repository
 2. **Check file permissions**: Make sure the script is readable
 3. **Check repository**: Verify you're running workflows from the repository that contains the script
+4. **Check naming**: Script name must be exact: `api_review_validator_v0_6.py`
+
+#### "❌ Unsupported Commonalities Version"
+**Expected behavior** for versions other than 0.6:
+
+```
+❌ Commonalities 0.7 is not yet supported
+```
+
+**Solutions:**
+1. **Use 0.6**: Change version parameter to `0.6` for current reviews  
+2. **Wait for support**: Future versions will be added as new Commonalities releases
+3. **Manual review**: Use traditional review process for unsupported versions
 
 ### Comment Trigger Issues
 
@@ -462,12 +546,6 @@ Line 4:
 - Verify GitHub Actions are enabled in the repository
 - Check workflow permissions in repository settings
 - Look for workflow runs in the Actions tab
-
-#### Bot Posts Acknowledgment but No Results
-- Check the workflow run for errors (link provided in acknowledgment)
-- Verify the target repository and PR are accessible
-- Check if API definition files exist in expected locations
-- **Most common**: Check if the validation script exists
 
 ### Manual Trigger Issues
 
@@ -498,35 +576,13 @@ Line 4:
 - Ensure target repository is accessible
 - **Most common**: Check if the Python validation script exists
 
-### Permission Issues
-
-#### Comment Trigger Not Working
-1. **Repository Settings**:
-   - Ensure GitHub Actions are enabled
-   - Check workflow permissions allow issue comments
-   - Verify the bot has write access to issues
-
-2. **Issue Access**:
-   - Confirm the issue is in the ReleaseManagement repository
-   - Check that the issue is open
-   - Verify issue permissions
-
-#### Manual Trigger Access Denied
-1. **For ReleaseManagement repository**:
-   - Ensure GitHub Actions are enabled
-   - Check workflow permissions in repository settings
-   - Verify user has Actions execution permissions
-
-2. **For target repositories**:
-   - Verify the GitHub token has read access
-   - Check if the repository is private and permissions are sufficient
-
 ### Debug Steps
 
-#### For Script Issues
-1. **Verify script exists**: Check `scripts/api_review_validator.py` in your workflow repository
-2. **Check workflow logs**: Look for the "Locate API Validator Script" step
-3. **Verify script syntax**: Test the Python script locally if possible
+#### For Version-Specific Issues
+1. **Verify script exists**: Check `scripts/api_review_validator_v0_6.py` in your workflow repository
+2. **Check workflow logs**: Look for the "Locate Version-Specific API Validator Script" step
+3. **Verify version support**: Ensure you're using Commonalities 0.6
+4. **Check version validation**: Look for "Validate Commonalities Version Support" step
 
 #### For Comment Triggers
 1. Check if the comment appears in the issue
@@ -545,7 +601,7 @@ Line 4:
 2. Check that API files exist in `/code/API_definitions/`
 3. Review the detailed validation logs in the "api-review" job
 4. Download workflow artifacts if available
-5. **Always check**: Ensure `scripts/api_review_validator.py` exists in workflow repository
+5. **Always check**: Ensure version-specific validator script exists in workflow repository
 
 ## Repository Setup Requirements
 
@@ -561,7 +617,7 @@ If you want to run the workflows from your own fork or repository:
    │   ├── api-review-trigger.yml
    │   └── api-review-reusable.yml
    ├── scripts/
-   │   └── api_review_validator.py  # CRITICAL: Must exist
+   │   └── api_review_validator_v0_6.py  # CRITICAL: Must exist for 0.6 support
    └── documentation/...
    ```
 3. **Configure permissions** for accessing other CAMARA repositories
@@ -569,14 +625,49 @@ If you want to run the workflows from your own fork or repository:
 
 ### For Official CAMARA Usage
 
-When moving to official CAMARA usage:
+When using in production CAMARA environment:
 
-1. **Upload all three files** to `camaraproject/ReleaseManagement`:
+1. **Upload all required files** to `camaraproject/ReleaseManagement`:
    - `api-review-trigger.yml`
    - `api-review-reusable.yml` 
-   - `scripts/api_review_validator.py`
+   - `scripts/api_review_validator_v0_6.py`
 2. **Configure repository permissions** for cross-repository access
 3. **Test thoroughly** with existing release candidate PRs
+4. **Plan for future versions** by adding validator scripts as new Commonalities releases
+
+## Adding Support for Future Versions
+
+### For Maintainers: Adding New Commonalities Version
+
+When a new Commonalities version (e.g., 0.7) is released:
+
+1. **Create version-specific validator script**:
+   ```
+   scripts/api_review_validator_v0_7.py
+   ```
+
+2. **Update version validation logic** in `api-review-reusable.yml`:
+   ```yaml
+   case "$COMMONALITIES_VERSION" in
+     "0.6")
+       echo "validator_script=api_review_validator_v0_6.py" >> $GITHUB_OUTPUT
+       ;;
+     "0.7")  # Add new version
+       echo "validator_script=api_review_validator_v0_7.py" >> $GITHUB_OUTPUT
+       ;;
+   ```
+
+3. **Update trigger workflow** dropdown options in `api-review-trigger.yml`:
+   ```yaml
+   commonalities_version:
+     type: choice
+     options:
+       - '0.6'
+       - '0.7'  # Add new option
+   ```
+
+4. **Test thoroughly** with both comment and manual triggers
+5. **Update documentation** to reflect new version support
 
 ## Security Considerations
 
@@ -584,7 +675,8 @@ When moving to official CAMARA usage:
 - No sensitive data is stored or transmitted
 - All validation is performed in isolated GitHub Actions runners
 - Reports contain only structural/compliance information, not business logic details
-- **Python script** must be maintained and secured in the workflow repository
+- **Version-specific scripts** must be maintained and secured in the workflow repository
+- **Script isolation**: Each version uses its own validator to prevent cross-contamination
 
 ## Limitations
 
@@ -593,12 +685,18 @@ When moving to official CAMARA usage:
 3. **Business Logic**: Cannot validate API design appropriateness
 4. **Real-time Data**: No validation against external systems or live endpoints
 5. **Language Support**: Currently focused on YAML/OpenAPI definitions only
-6. **Script Dependency**: Requires manual maintenance of Python validation script
+6. **Version Dependencies**: Requires manual maintenance of version-specific validation scripts
+7. **Version Support**: Currently limited to Commonalities 0.6
 
 ## Support and Feedback
 
 For issues with the workflow system:
-1. **Check script location**: Verify `scripts/api_review_validator.py` exists in workflow repository
-2. **Check the GitHub Actions logs** for detailed error information
-3. **Review this usage guide** for common troubleshooting steps
-4. **Create an issue** in the ReleaseManagement repository with workflow run details
+1. **Check version compatibility**: Verify you're using Commonalities 0.6
+2. **Check script location**: Verify `scripts/api_review_validator_v0_6.py` exists in workflow repository
+3. **Check the GitHub Actions logs** for detailed error information
+4. **Review this usage guide** for common troubleshooting steps
+5. **Create an issue** in the ReleaseManagement repository with:
+   - Workflow run details
+   - Commonalities version used
+   - Error messages from logs
+   - Expected vs. actual behavior
