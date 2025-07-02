@@ -126,8 +126,8 @@ jobs:
       - name: Acknowledge Comment
         if: github.event_name == 'issue_comment' && steps.check.outputs.should_run == 'true'
         run: |
-          # Post acknowledgment comment
-          ACKNOWLEDGE_COMMENT=$(cat << 'EOF'
+          # Create properly formatted acknowledgment comment using a temp file
+          cat > acknowledge_comment.md << EOF
           🤖 **API Review Triggered**
           
           Starting automated CAMARA API review...
@@ -139,13 +139,15 @@ jobs:
           
           Results will be posted here when the review completes.
           EOF
-          )
+          
+          # Post comment using the properly formatted body
+          COMMENT_JSON=$(jq -n --rawfile body acknowledge_comment.md '{body: $body}')
           
           curl -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments" \
-            -d "{\"body\":$(echo "$ACKNOWLEDGE_COMMENT" | jq -Rs .)}"
+            -d "$COMMENT_JSON"
 
   validate-input:
     runs-on: ubuntu-latest
@@ -155,8 +157,11 @@ jobs:
       repo_owner: ${{ steps.parse.outputs.repo_owner }}
       repo_name: ${{ steps.parse.outputs.repo_name }}
       pr_number: ${{ steps.parse.outputs.pr_number }}
-      pr_head_sha: ${{ steps.parse.outputs.pr_head_sha }}
-      pr_head_ref: ${{ steps.parse.outputs.pr_head_ref }}
+      pr_head_sha: ${{ steps.pr_details.outputs.pr_head_sha }}
+      pr_head_ref: ${{ steps.pr_details.outputs.pr_head_ref }}
+      pr_head_repo: ${{ steps.pr_details.outputs.pr_head_repo }}
+      pr_base_ref: ${{ steps.pr_details.outputs.pr_base_ref }}
+      pr_base_repo: ${{ steps.pr_details.outputs.pr_base_repo }}
       pull_request_url: ${{ steps.determine-inputs.outputs.pull_request_url }}
       issue_number: ${{ steps.determine-inputs.outputs.issue_number }}
       review_type: ${{ steps.determine-inputs.outputs.review_type }}
@@ -276,9 +281,14 @@ jobs:
             exit 1
           fi
           
-          # Extract head SHA and ref
+          # Extract head SHA and ref (this is the PR branch we want to check out)
           PR_HEAD_SHA=$(echo "$PR_RESPONSE" | jq -r '.head.sha')
           PR_HEAD_REF=$(echo "$PR_RESPONSE" | jq -r '.head.ref')
+          PR_HEAD_REPO=$(echo "$PR_RESPONSE" | jq -r '.head.repo.full_name')
+          
+          # Extract base info for reference (this is what the PR targets)
+          PR_BASE_REF=$(echo "$PR_RESPONSE" | jq -r '.base.ref')
+          PR_BASE_REPO=$(echo "$PR_RESPONSE" | jq -r '.base.repo.full_name')
           
           # Validate extracted values
           if [[ -z "$PR_HEAD_SHA" || "$PR_HEAD_SHA" == "null" ]]; then
@@ -293,10 +303,17 @@ jobs:
           
           echo "pr_head_sha=$PR_HEAD_SHA" >> $GITHUB_OUTPUT
           echo "pr_head_ref=$PR_HEAD_REF" >> $GITHUB_OUTPUT
+          echo "pr_head_repo=$PR_HEAD_REPO" >> $GITHUB_OUTPUT
+          echo "pr_base_ref=$PR_BASE_REF" >> $GITHUB_OUTPUT
+          echo "pr_base_repo=$PR_BASE_REPO" >> $GITHUB_OUTPUT
           
           echo "✅ PR is open and accessible"
+          echo "🔍 PR Details:"
           echo "  Head SHA: $PR_HEAD_SHA"
-          echo "  Head Ref: $PR_HEAD_REF"
+          echo "  Head Ref: $PR_HEAD_REF (this is the PR branch we'll check out)"
+          echo "  Head Repo: $PR_HEAD_REPO"
+          echo "  Base Ref: $PR_BASE_REF (this is what the PR targets)"  
+          echo "  Base Repo: $PR_BASE_REPO"
 
   call-review-workflow:
     needs: validate-input
@@ -307,6 +324,9 @@ jobs:
       pr_number: ${{ needs.validate-input.outputs.pr_number }}
       pr_head_sha: ${{ needs.validate-input.outputs.pr_head_sha }}
       pr_head_ref: ${{ needs.validate-input.outputs.pr_head_ref }}
+      pr_head_repo: ${{ needs.validate-input.outputs.pr_head_repo }}
+      pr_base_ref: ${{ needs.validate-input.outputs.pr_base_ref }}
+      pr_base_repo: ${{ needs.validate-input.outputs.pr_base_repo }}
       review_type: ${{ needs.validate-input.outputs.review_type }}
       commonalities_version: ${{ needs.validate-input.outputs.commonalities_version }}
       issue_number: ${{ needs.validate-input.outputs.issue_number }}
@@ -381,21 +401,24 @@ jobs:
             TRIGGER_INFO="**Triggered by**: Manual workflow dispatch"
           fi
           
-          FAILURE_COMMENT=$(cat << 'EOF'
+          # Create properly formatted failure comment using a temp file
+          cat > failure_comment.md << EOF
           ## ❌ API Review Failed
           
           The automated API review encountered an error and could not complete.
           
-          EOF
-          )
+          ${TRIGGER_INFO}
+          **Pull Request**: ${{ needs.validate-input.outputs.pull_request_url }}
+          **Workflow Run**: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
           
-          FAILURE_COMMENT="${FAILURE_COMMENT}\n${TRIGGER_INFO}\n"
-          FAILURE_COMMENT="${FAILURE_COMMENT}**Pull Request**: ${{ needs.validate-input.outputs.pull_request_url }}\n"
-          FAILURE_COMMENT="${FAILURE_COMMENT}**Workflow Run**: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n"
-          FAILURE_COMMENT="${FAILURE_COMMENT}Please check the workflow logs and retry the review."
+          Please check the workflow logs and retry the review.
+          EOF
+          
+          # Post comment using the properly formatted body
+          COMMENT_JSON=$(jq -n --rawfile body failure_comment.md '{body: $body}')
           
           curl -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             "${{ github.api_url }}/repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
-            -d "{\"body\":$(echo "$FAILURE_COMMENT" | jq -Rs .)}"
+            -d "$COMMENT_JSON"
