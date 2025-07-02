@@ -10,6 +10,8 @@
 #   - Validates Commonalities version support (currently only 0.6)
 #   - Uses version-specific validator scripts
 #   - Enhanced error handling for unsupported versions
+#   - Simplified download section with direct artifacts link
+#   - Unique filename generation with repo name and PR number
 # 
 # This workflow validates inputs and calls the reusable review workflow.
 # 
@@ -407,8 +409,19 @@ jobs:
       - name: Post Summary to Issue
         run: |
           ISSUE_NUMBER="${{ needs.validate-input.outputs.issue_number }}"
+          REPO_NAME="${{ needs.validate-input.outputs.repo_name }}"
+          PR_NUMBER="${{ needs.validate-input.outputs.pr_number }}"
+          COMMONALITIES_VERSION="${{ needs.validate-input.outputs.commonalities_version }}"
           
           echo "📋 Preparing to post summary to issue #${ISSUE_NUMBER}..."
+          
+          # Create URLs
+          WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          ARTIFACTS_URL="${WORKFLOW_URL}#artifacts"
+          
+          # Construct expected report filename pattern
+          TIMESTAMP_PATTERN=$(date '+%Y%m%d_*')
+          EXPECTED_REPORT="camara-api-review_${REPO_NAME}_pr${PR_NUMBER}_${TIMESTAMP_PATTERN}.md"
           
           # Create comment body with trigger source indicator
           TRIGGER_INFO=""
@@ -426,17 +439,28 @@ jobs:
           **Pull Request**: [${{ needs.validate-input.outputs.repo_owner }}/${{ needs.validate-input.outputs.repo_name }}#${{ needs.validate-input.outputs.pr_number }}](${{ needs.validate-input.outputs.pull_request_url }})
           **Review Type**: ${{ needs.validate-input.outputs.review_type }}
           **Commonalities Version**: ${{ needs.validate-input.outputs.commonalities_version }}
-          **Workflow Run**: [View Details](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          **Workflow Run**: [View Details](${WORKFLOW_URL})
           
           EOF
           
           # Append the summary content from the file
           cat summary_content.md >> comment_body.md
           
+          # Add simplified download section
+          cat >> comment_body.md << EOF
+          
+          ---
+          
+          ## 📥 Download Detailed Report
+          
+          **🔗 [📋 Go to Artifacts](${ARTIFACTS_URL})**
+          **📄 Report File**: \`${EXPECTED_REPORT}\`
+          
+          EOF
+          
           # Add version-specific information if there were version issues
           if [[ "${{ needs.call-review-workflow.outputs.review_status }}" == "error" ]]; then
             cat >> comment_body.md << EOF
-          
           ---
           
           **📋 Supported Versions:**
@@ -454,9 +478,9 @@ jobs:
           echo "Lines: $(wc -l < comment_body.md)"
           echo "Characters: $(wc -c < comment_body.md)"
           echo ""
-          echo "Preview (first 10 lines):"
-          head -10 comment_body.md
-          echo "..."
+          echo "🔗 Key URLs:"
+          echo "  Artifacts: ${ARTIFACTS_URL}"
+          echo "  Expected Report: ${EXPECTED_REPORT}"
           
           # Post comment to issue using the properly formatted body
           if command -v jq > /dev/null; then
@@ -478,13 +502,16 @@ jobs:
               -d "{\"body\":\"$COMMENT_BODY\"}"
           fi
           
-          echo "✅ Summary posted to issue #${ISSUE_NUMBER}"
+          echo "✅ Summary posted to issue #${ISSUE_NUMBER} with direct download links"
           
           # Log additional debug information
           echo "📋 Debug Summary:"
-          echo "  Commonalities Version: ${{ needs.validate-input.outputs.commonalities_version }}"
+          echo "  Repository: ${REPO_NAME}"
+          echo "  PR Number: ${PR_NUMBER}"
+          echo "  Commonalities Version: ${COMMONALITIES_VERSION}"
           echo "  Review Status: ${{ needs.call-review-workflow.outputs.review_status }}"
           echo "  Critical Issues: ${{ needs.call-review-workflow.outputs.critical_issues_count }}"
+          echo "  Artifacts Link: ${ARTIFACTS_URL}"
           echo "  Comment Length: $(wc -c < comment_body.md) characters"
 
       - name: Handle Workflow Failure
