@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
 """
-CAMARA API Review Validator - Complete Version with All Enhancements
-Automated validation of CAMARA API definitions based on the comprehensive checklist
+Enhanced CAMARA API Review Validator - Version 0.6
+Automated validation of CAMARA API definitions with enhanced event subscription support
 
-This script analyzes API definitions and reports findings, but does not judge
-whether findings constitute a "failure" - that decision is left to the workflow.
-
-Enhanced features:
-- Consolidated checks in summary (not repeated per API)
-- Unique filename generation with repo name, PR number, timestamp
-- Extended summary to 25 items with critical and medium priority
-- Improved issue organization and presentation
+This script analyzes API definitions and reports findings, focusing on Commonalities 0.6
+requirements including event subscriptions, CloudEvents, and updated error responses.
 """
 
 import os
@@ -111,6 +105,19 @@ class CAMARAAPIValidator:
             self._check_device_schema(api_spec, result)
             self._check_file_naming(file_path, api_spec, result)
             
+            # Enhanced checks for Commonalities 0.6
+            self._check_work_in_progress_version(api_spec, result)
+            self._check_updated_generic401(api_spec, result)
+            
+            # Event subscription specific checks
+            if self._is_subscription_api(api_spec):
+                self._check_event_subscription_compliance(api_spec, result)
+                self._check_cloudevents_compliance(api_spec, result)
+                self._check_event_type_naming(api_spec, result)
+                self._check_subscription_lifecycle_events(api_spec, result)
+                self._check_sink_validation(api_spec, result)
+                self._check_subscription_error_codes(api_spec, result)
+            
             # Add manual checks needed
             result.manual_checks_needed = [
                 "Business logic appropriateness review",
@@ -119,7 +126,8 @@ class CAMARAAPIValidator:
                 "Use case coverage evaluation",
                 "Security considerations beyond structure",
                 "Cross-file reference validation (if multi-API)",
-                "Performance and scalability considerations"
+                "Performance and scalability considerations",
+                "Event notification flow testing (for subscription APIs)"
             ]
             
         except yaml.YAMLError as e:
@@ -133,6 +141,276 @@ class CAMARAAPIValidator:
         
         return result
 
+    def _is_subscription_api(self, spec: dict) -> bool:
+        """Check if this is an event subscription API"""
+        title = spec.get('info', {}).get('title', '').lower()
+        paths = spec.get('paths', {})
+        
+        # Check if API name contains 'subscription'
+        if 'subscription' in title:
+            return True
+            
+        # Check if has /subscriptions path
+        if '/subscriptions' in paths:
+            return True
+            
+        # Check for CloudEvent schemas
+        schemas = spec.get('components', {}).get('schemas', {})
+        if 'CloudEvent' in schemas:
+            return True
+            
+        return False
+
+    def _check_work_in_progress_version(self, spec: dict, result: ValidationResult):
+        """Check for work-in-progress versions that shouldn't be released"""
+        result.checks_performed.append("Work-in-progress version validation")
+        
+        version = spec.get('info', {}).get('version', '')
+        
+        if version == 'wip':
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Version",
+                "Work-in-progress version 'wip' cannot be released",
+                "info.version",
+                "Update to proper semantic version (e.g., 0.1.0-rc.1)"
+            ))
+        
+        # Check server URL for vwip
+        servers = spec.get('servers', [])
+        if servers:
+            server_url = servers[0].get('url', '')
+            if 'vwip' in server_url:
+                result.issues.append(ValidationIssue(
+                    Severity.CRITICAL, "Server URL",
+                    "Server URL contains 'vwip' - not valid for release",
+                    "servers[0].url",
+                    "Update to proper version format (e.g., v0.1rc1)"
+                ))
+
+    def _check_updated_generic401(self, spec: dict, result: ValidationResult):
+        """Check for updated Generic401 response format (Commonalities 0.6)"""
+        result.checks_performed.append("Updated Generic401 response validation")
+        
+        responses = spec.get('components', {}).get('responses', {})
+        generic401 = responses.get('Generic401', {})
+        
+        if generic401:
+            content = generic401.get('content', {})
+            app_json = content.get('application/json', {})
+            examples = app_json.get('examples', {})
+            
+            # Check for updated message in examples
+            for example_name, example in examples.items():
+                if 'UNAUTHENTICATED' in example_name:
+                    example_value = example.get('value', {})
+                    message = example_value.get('message', '')
+                    
+                    if 'A new authentication is required' not in message:
+                        result.issues.append(ValidationIssue(
+                            Severity.CRITICAL, "Error Responses",
+                            "Generic401 response missing updated message format",
+                            f"components.responses.Generic401.examples.{example_name}",
+                            "Add 'A new authentication is required.' to message"
+                        ))
+
+    def _check_event_subscription_compliance(self, spec: dict, result: ValidationResult):
+        """Check general event subscription compliance"""
+        result.checks_performed.append("Event subscription compliance validation")
+        
+        # Check for subscription endpoint naming
+        paths = spec.get('paths', {})
+        has_subscriptions_path = False
+        
+        for path in paths.keys():
+            if path.endswith('/subscriptions') or '/subscriptions/' in path:
+                has_subscriptions_path = True
+                break
+        
+        if not has_subscriptions_path:
+            result.issues.append(ValidationIssue(
+                Severity.MEDIUM, "Event Subscriptions",
+                "Subscription API should have /subscriptions endpoint",
+                "paths"
+            ))
+
+    def _check_cloudevents_compliance(self, spec: dict, result: ValidationResult):
+        """Check CloudEvents compliance for notification callbacks"""
+        result.checks_performed.append("CloudEvents compliance validation")
+        
+        schemas = spec.get('components', {}).get('schemas', {})
+        cloud_event = schemas.get('CloudEvent', {})
+        
+        if cloud_event:
+            # Check required CloudEvent fields
+            required_fields = cloud_event.get('required', [])
+            expected_fields = ['id', 'source', 'specversion', 'type', 'time']
+            
+            for field in expected_fields:
+                if field not in required_fields:
+                    result.issues.append(ValidationIssue(
+                        Severity.CRITICAL, "CloudEvents",
+                        f"CloudEvent missing required field: {field}",
+                        "components.schemas.CloudEvent.required"
+                    ))
+            
+            # Check specversion enum
+            properties = cloud_event.get('properties', {})
+            specversion = properties.get('specversion', {})
+            enum_values = specversion.get('enum', [])
+            
+            if '1.0' not in enum_values:
+                result.issues.append(ValidationIssue(
+                    Severity.CRITICAL, "CloudEvents",
+                    "CloudEvent specversion must include '1.0'",
+                    "components.schemas.CloudEvent.properties.specversion.enum"
+                ))
+            
+            # Check datacontenttype enum
+            datacontenttype = properties.get('datacontenttype', {})
+            enum_values = datacontenttype.get('enum', [])
+            
+            if 'application/json' not in enum_values:
+                result.issues.append(ValidationIssue(
+                    Severity.CRITICAL, "CloudEvents",
+                    "CloudEvent datacontenttype must include 'application/json'",
+                    "components.schemas.CloudEvent.properties.datacontenttype.enum"
+                ))
+
+    def _check_event_type_naming(self, spec: dict, result: ValidationResult):
+        """Check event type naming follows CAMARA pattern"""
+        result.checks_performed.append("Event type naming validation")
+        
+        schemas = spec.get('components', {}).get('schemas', {})
+        
+        # Check event type enums
+        for schema_name, schema in schemas.items():
+            if 'EventType' in schema_name and schema.get('type') == 'string':
+                enum_values = schema.get('enum', [])
+                
+                for event_type in enum_values:
+                    if not re.match(r'^org\.camaraproject\.[a-z0-9-]+\.v\d+\.[a-z0-9-]+$', event_type):
+                        result.issues.append(ValidationIssue(
+                            Severity.MEDIUM, "Event Type Naming",
+                            f"Event type doesn't follow CAMARA pattern: {event_type}",
+                            f"components.schemas.{schema_name}.enum",
+                            "Use pattern: org.camaraproject.<api-name>.v<version>.<event-name>"
+                        ))
+
+    def _check_subscription_lifecycle_events(self, spec: dict, result: ValidationResult):
+        """Check for standard subscription lifecycle events"""
+        result.checks_performed.append("Subscription lifecycle events validation")
+        
+        schemas = spec.get('components', {}).get('schemas', {})
+        
+        # Check for lifecycle event schemas
+        lifecycle_events = [
+            'subscription-started',
+            'subscription-updated', 
+            'subscription-ended'
+        ]
+        
+        found_events = []
+        for schema_name, schema in schemas.items():
+            if 'EventType' in schema_name and schema.get('type') == 'string':
+                enum_values = schema.get('enum', [])
+                for event_type in enum_values:
+                    for lifecycle_event in lifecycle_events:
+                        if lifecycle_event in event_type:
+                            found_events.append(lifecycle_event)
+        
+        # Check termination reasons if subscription-ended exists
+        if 'subscription-ended' in found_events:
+            termination_schema = schemas.get('TerminationReason', {})
+            if termination_schema:
+                enum_values = termination_schema.get('enum', [])
+                required_reasons = [
+                    'NETWORK_TERMINATED',
+                    'SUBSCRIPTION_EXPIRED',
+                    'MAX_EVENTS_REACHED',
+                    'ACCESS_TOKEN_EXPIRED',
+                    'SUBSCRIPTION_DELETED'
+                ]
+                
+                for reason in required_reasons:
+                    if reason not in enum_values:
+                        result.issues.append(ValidationIssue(
+                            Severity.MEDIUM, "Subscription Events",
+                            f"Missing termination reason: {reason}",
+                            "components.schemas.TerminationReason.enum"
+                        ))
+
+    def _check_sink_validation(self, spec: dict, result: ValidationResult):
+        """Check sink property validation for subscriptions"""
+        result.checks_performed.append("Sink validation")
+        
+        # Check for INVALID_SINK error response
+        responses = spec.get('components', {}).get('responses', {})
+        found_invalid_sink = False
+        
+        for response_name, response in responses.items():
+            content = response.get('content', {})
+            app_json = content.get('application/json', {})
+            schema = app_json.get('schema', {})
+            
+            # Check in allOf structure
+            all_of = schema.get('allOf', [])
+            for item in all_of:
+                properties = item.get('properties', {})
+                code_prop = properties.get('code', {})
+                enum_values = code_prop.get('enum', [])
+                
+                if 'INVALID_SINK' in enum_values:
+                    found_invalid_sink = True
+                    break
+        
+        if not found_invalid_sink:
+            result.issues.append(ValidationIssue(
+                Severity.MEDIUM, "Sink Validation",
+                "Missing INVALID_SINK error response",
+                "components.responses",
+                "Add 400 INVALID_SINK error response for sink validation"
+            ))
+
+    def _check_subscription_error_codes(self, spec: dict, result: ValidationResult):
+        """Check subscription-specific error codes"""
+        result.checks_performed.append("Subscription error codes validation")
+        
+        # Check for device-related error codes
+        required_device_errors = [
+            'MISSING_IDENTIFIER',
+            'UNNECESSARY_IDENTIFIER',
+            'UNSUPPORTED_IDENTIFIER',
+            'SERVICE_NOT_APPLICABLE'
+        ]
+        
+        responses = spec.get('components', {}).get('responses', {})
+        found_errors = set()
+        
+        for response_name, response in responses.items():
+            content = response.get('content', {})
+            app_json = content.get('application/json', {})
+            schema = app_json.get('schema', {})
+            
+            all_of = schema.get('allOf', [])
+            for item in all_of:
+                properties = item.get('properties', {})
+                code_prop = properties.get('code', {})
+                enum_values = code_prop.get('enum', [])
+                
+                for error in required_device_errors:
+                    if error in enum_values:
+                        found_errors.add(error)
+        
+        for error in required_device_errors:
+            if error not in found_errors:
+                result.issues.append(ValidationIssue(
+                    Severity.LOW, "Error Responses",
+                    f"Missing device error code: {error}",
+                    "components.responses",
+                    f"Add 422 {error} error response for device validation"
+                ))
+
+    # Existing methods from the original validator...
     def _check_openapi_version(self, spec: dict, result: ValidationResult):
         """Check OpenAPI version compliance"""
         result.checks_performed.append("OpenAPI version validation")
@@ -162,9 +440,9 @@ class CAMARAAPIValidator:
                 "Remove 'API' from title"
             ))
         
-        # Version check
+        # Version check (enhanced for wip detection)
         version = info.get('version', '')
-        if not re.match(r'^\d+\.\d+\.\d+(-rc\.\d+|-alpha\.\d+)?$', version):
+        if version != 'wip' and not re.match(r'^\d+\.\d+\.\d+(-rc\.\d+|-alpha\.\d+)?$', version):
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Info Object",
                 f"Invalid version format: {version}",
@@ -249,8 +527,16 @@ class CAMARAAPIValidator:
         # Extract version from info for validation
         version = spec.get('info', {}).get('version', '')
         
+        # Enhanced check for wip versions
+        if version == 'wip' and 'vwip' not in url:
+            result.issues.append(ValidationIssue(
+                Severity.MEDIUM, "Servers Object",
+                "WIP version should use 'vwip' in URL or be updated to proper version",
+                "servers[0].url"
+            ))
+        
         # Check URL format for RC versions
-        if '-rc.' in version:
+        if '-rc.' in version and version != 'wip':
             match = re.match(r'^(\d+)\.(\d+)\.(\d+)-rc\.(\d+)$', version)
             if match:
                 major, minor, patch, rc_num = match.groups()
@@ -539,6 +825,7 @@ class CAMARAAPIValidator:
                         file_path
                     ))
 
+
 def find_api_files(directory: str) -> List[str]:
     """Find all YAML files in the API definitions directory"""
     api_dir = Path(directory) / "code" / "API_definitions"
@@ -552,33 +839,14 @@ def find_api_files(directory: str) -> List[str]:
     
     return [str(f) for f in yaml_files]
 
-def generate_report(results: List[ValidationResult], output_dir: str, repo_name: str = "", pr_number: str = ""):
-    """Generate comprehensive report and summary with unique filename"""
+def generate_report(results: List[ValidationResult], output_dir: str):
+    """Generate comprehensive report and summary"""
     os.makedirs(output_dir, exist_ok=True)
     
-    # Generate unique filename with repository name, PR number, and timestamp
-    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    
-    if repo_name and pr_number:
-        report_filename = f"camara-api-review_{repo_name}_pr{pr_number}_{timestamp}.md"
-    elif repo_name:
-        report_filename = f"camara-api-review_{repo_name}_{timestamp}.md"
-    else:
-        report_filename = f"camara-api-review_{timestamp}.md"
-    
-    report_path = f"{output_dir}/{report_filename}"
-    
     # Generate detailed report
-    with open(report_path, "w") as f:
-        f.write("# CAMARA API Review - Detailed Report\n\n")
-        
-        # Add header information
-        if repo_name:
-            f.write(f"**Repository**: {repo_name}\n")
-        if pr_number:
-            f.write(f"**Pull Request**: #{pr_number}\n")
-        f.write(f"**Generated**: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
-        f.write(f"**Report File**: {report_filename}\n\n")
+    with open(f"{output_dir}/detailed-report.md", "w") as f:
+        f.write("# CAMARA API Review - Detailed Report (Enhanced for Commonalities 0.6)\n\n")
+        f.write(f"**Generated**: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n")
         
         # Summary statistics
         total_critical = sum(r.critical_count for r in results)
@@ -591,32 +859,9 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
         f.write(f"- **Medium Issues**: {total_medium}\n")
         f.write(f"- **Low Priority Issues**: {total_low}\n\n")
         
-        # Collect unique checks performed across all APIs
-        all_checks_performed = set()
-        all_manual_checks = set()
-        
+        # Detailed results for each API
         for result in results:
-            all_checks_performed.update(result.checks_performed)
-            all_manual_checks.update(result.manual_checks_needed)
-        
-        # Add consolidated check sections to summary
-        if all_checks_performed:
-            f.write("## Automated Checks Performed\n\n")
-            for check in sorted(all_checks_performed):
-                f.write(f"- {check}\n")
-            f.write("\n")
-        
-        if all_manual_checks:
-            f.write("## Manual Review Required\n\n")
-            for check in sorted(all_manual_checks):
-                f.write(f"- {check}\n")
-            f.write("\n")
-        
-        # Detailed results for each API (simplified - no repeated check sections)
-        f.write("## API-Specific Results\n\n")
-        
-        for result in results:
-            f.write(f"### {result.api_name} (v{result.version})\n\n")
+            f.write(f"## {result.api_name} (v{result.version})\n\n")
             f.write(f"**File**: `{result.file_path}`\n\n")
             
             if result.issues:
@@ -626,12 +871,12 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
                 low_issues = [i for i in result.issues if i.severity == Severity.LOW]
                 
                 for severity, issues in [
-                    ("Critical Issues", critical_issues),
-                    ("Medium Priority Issues", medium_issues),
-                    ("Low Priority Issues", low_issues)
+                    ("🔴 Critical Issues", critical_issues),
+                    ("🟡 Medium Priority Issues", medium_issues),
+                    ("🔵 Low Priority Issues", low_issues)
                 ]:
                     if issues:
-                        f.write(f"#### {severity}\n\n")
+                        f.write(f"### {severity}\n\n")
                         for issue in issues:
                             f.write(f"**{issue.category}**: {issue.description}\n")
                             if issue.location:
@@ -642,14 +887,24 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
             else:
                 f.write("✅ **No issues found**\n\n")
             
-            f.write("---\n\n")
+            # Checks performed
+            f.write("### Automated Checks Performed\n\n")
+            for check in result.checks_performed:
+                f.write(f"- {check}\n")
+            
+            # Manual checks needed
+            f.write("\n### Manual Review Required\n\n")
+            for check in result.manual_checks_needed:
+                f.write(f"- {check}\n")
+            
+            f.write("\n---\n\n")
     
-    # Generate summary for GitHub comment with 25-item limit
+    # Generate summary for GitHub comment
     with open(f"{output_dir}/summary.md", "w") as f:
         if not results:
             f.write("❌ **No API definition files found**\n\n")
             f.write("Please ensure YAML files are located in `/code/API_definitions/`\n")
-            return report_filename
+            return
         
         total_critical = sum(r.critical_count for r in results)
         total_medium = sum(r.medium_count for r in results)
@@ -677,88 +932,49 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
         f.write(f"- 🟡 Medium: {total_medium}\n")
         f.write(f"- 🔵 Low: {sum(r.low_count for r in results)}\n\n")
         
-        # Enhanced issues detail with 25-item limit, prioritizing critical then medium
-        if total_critical > 0 or total_medium > 0:
-            # Determine what to show based on count - now using 25 as the limit
-            if total_critical + total_medium <= 25:
-                # Show both critical and medium when total is manageable (≤25)
+        # Enhanced issues detail with smart medium issue inclusion
+        if total_critical > 0 or (total_critical + total_medium < 10 and total_medium > 0):
+            # Determine what to show based on count
+            if total_critical + total_medium < 10:
+                # Show both critical and medium when total is manageable
                 f.write("**Issues Requiring Attention**:\n")
                 
-                # Collect all issues from all APIs with their source
-                all_critical_issues = []
-                all_medium_issues = []
-                
+                # Show critical issues first
                 for result in results:
                     critical_issues = [i for i in result.issues if i.severity == Severity.CRITICAL]
                     medium_issues = [i for i in result.issues if i.severity == Severity.MEDIUM]
                     
-                    # Add API name to each issue for context
-                    for issue in critical_issues:
-                        all_critical_issues.append((result.api_name, issue))
-                    for issue in medium_issues:
-                        all_medium_issues.append((result.api_name, issue))
-                
-                # Show all critical issues first
-                if all_critical_issues:
-                    f.write(f"\n**🔴 Critical Issues ({len(all_critical_issues)}):**\n")
-                    for api_name, issue in all_critical_issues:
-                        f.write(f"- *{api_name}*: **{issue.category}** - {issue.description}\n")
-                
-                # Fill remaining slots with medium issues
-                remaining_slots = 25 - len(all_critical_issues)
-                medium_to_show = min(len(all_medium_issues), remaining_slots)
-                
-                if medium_to_show > 0:
-                    f.write(f"\n**🟡 Medium Priority Issues ({medium_to_show}):**\n")
-                    for api_name, issue in all_medium_issues[:medium_to_show]:
-                        f.write(f"- *{api_name}*: **{issue.category}** - {issue.description}\n")
-                
-                # Note if there are more medium issues not shown
-                if len(all_medium_issues) > medium_to_show:
-                    f.write(f"\n*Note: {len(all_medium_issues) - medium_to_show} additional medium priority issues found. See detailed report for complete list.*\n")
-            
+                    if critical_issues or medium_issues:
+                        f.write(f"\n*{result.api_name}*:\n")
+                        
+                        # Show all critical issues
+                        for issue in critical_issues:
+                            f.write(f"- 🔴 **{issue.category}**: {issue.description}\n")
+                        
+                        # Show medium issues if space allows
+                        remaining_slots = 10 - total_critical
+                        medium_to_show = min(len(medium_issues), remaining_slots)
+                        
+                        for issue in medium_issues[:medium_to_show]:
+                            f.write(f"- 🟡 **{issue.category}**: {issue.description}\n")
+                        
+                        if len(medium_issues) > medium_to_show:
+                            f.write(f"- 🟡 ... and {len(medium_issues) - medium_to_show} more medium priority issues\n")
             else:
-                # Too many issues (>25 total) - show critical issues with selective medium
+                # Only show critical issues when there are too many total issues
                 f.write("**Critical Issues Requiring Immediate Attention**:\n")
-                
-                # Collect all critical issues
-                all_critical_issues = []
                 for result in results:
                     critical_issues = [i for i in result.issues if i.severity == Severity.CRITICAL]
-                    for issue in critical_issues:
-                        all_critical_issues.append((result.api_name, issue))
+                    if critical_issues:
+                        f.write(f"\n*{result.api_name}*:\n")
+                        for issue in critical_issues[:3]:  # Limit to first 3
+                            f.write(f"- {issue.category}: {issue.description}\n")
+                        if len(critical_issues) > 3:
+                            f.write(f"- ... and {len(critical_issues) - 3} more\n")
                 
-                # Show critical issues (up to 20 to leave room for some medium)
-                critical_to_show = min(len(all_critical_issues), 20)
-                
-                if critical_to_show > 0:
-                    f.write(f"\n**🔴 Critical Issues ({critical_to_show} of {len(all_critical_issues)}):**\n")
-                    for api_name, issue in all_critical_issues[:critical_to_show]:
-                        f.write(f"- *{api_name}*: **{issue.category}** - {issue.description}\n")
-                
-                # Note if more critical issues exist
-                if len(all_critical_issues) > critical_to_show:
-                    f.write(f"\n*... and {len(all_critical_issues) - critical_to_show} more critical issues*\n")
-                
-                # Show some medium issues if there's room and they exist
-                remaining_slots = 25 - critical_to_show
-                if remaining_slots > 0 and total_medium > 0:
-                    all_medium_issues = []
-                    for result in results:
-                        medium_issues = [i for i in result.issues if i.severity == Severity.MEDIUM]
-                        for issue in medium_issues:
-                            all_medium_issues.append((result.api_name, issue))
-                    
-                    medium_to_show = min(len(all_medium_issues), remaining_slots)
-                    if medium_to_show > 0:
-                        f.write(f"\n**🟡 Sample Medium Priority Issues ({medium_to_show} of {len(all_medium_issues)}):**\n")
-                        for api_name, issue in all_medium_issues[:medium_to_show]:
-                            f.write(f"- *{api_name}*: **{issue.category}** - {issue.description}\n")
-                
-                # Add comprehensive note about remaining issues
-                total_not_shown = (total_critical + total_medium) - 25
-                if total_not_shown > 0:
-                    f.write(f"\n*Note: {total_not_shown} additional issues not shown above. See detailed report for complete analysis.*\n")
+                # Add note about medium issues
+                if total_medium > 0:
+                    f.write(f"\n*Note: {total_medium} medium priority issues also found. See detailed report for complete list.*\n")
             
             f.write("\n")
         
@@ -770,33 +986,21 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
         else:
             f.write(f"**Recommendation**: ❌ Address {total_critical} critical issue(s) before release\n")
         
-        f.write(f"\n📄 **Detailed Report**: {report_filename}\n")
-        f.write("\n📄 **Download**: Available as workflow artifact for complete analysis\n")
-    
-    # Return the report filename for use by the workflow
-    return report_filename
+        f.write("\n📄 **Detailed Report**: Download the `api-review-detailed-report` artifact from the workflow run for complete analysis\n")
+        f.write("\n🔍 **Enhanced Validation**: This review includes Commonalities 0.6 compliance and event subscription validation\n")
 
 def main():
     """Main function - always exits with success after reporting findings"""
-    if len(sys.argv) < 4 or len(sys.argv) > 6:
-        print("Usage: python api_review_validator.py <repo_directory> <commonalities_version> <output_directory> [repo_name] [pr_number]")
+    if len(sys.argv) != 4:
+        print("Usage: python api_review_validator_v0_6.py <repo_directory> <commonalities_version> <output_directory>")
         print("")
         print("This script analyzes API definitions and reports findings.")
-        print("It does not judge whether findings constitute a failure - that decision is left to the workflow.")
-        print("")
-        print("Parameters:")
-        print("  repo_directory: Path to the repository to analyze")
-        print("  commonalities_version: CAMARA Commonalities version (e.g., 0.6)")
-        print("  output_directory: Where to write the reports")
-        print("  repo_name: (optional) Repository name for unique filename")
-        print("  pr_number: (optional) PR number for unique filename")
-        sys.exit(0)
+        print("Enhanced version includes event subscription and CloudEvents validation.")
+        sys.exit(0)  # Exit successfully even for usage errors
     
     repo_dir = sys.argv[1]
     commonalities_version = sys.argv[2]
     output_dir = sys.argv[3]
-    repo_name = sys.argv[4] if len(sys.argv) > 4 else ""
-    pr_number = sys.argv[5] if len(sys.argv) > 5 else ""
     
     # Find API files
     api_files = find_api_files(repo_dir)
@@ -805,9 +1009,8 @@ def main():
         print("❌ No API definition files found")
         print("Checked location: {}/code/API_definitions/".format(repo_dir))
         # Create empty results for summary
-        report_filename = generate_report([], output_dir, repo_name, pr_number)
-        print(f"📄 Empty report generated: {report_filename}")
-        sys.exit(0)
+        generate_report([], output_dir)
+        sys.exit(0)  # Exit successfully even when no files found
     
     print(f"🔍 Found {len(api_files)} API definition file(s)")
     for file in api_files:
@@ -826,6 +1029,13 @@ def main():
             print(f"  🔴 Critical: {result.critical_count}")
             print(f"  🟡 Medium: {result.medium_count}")
             print(f"  🔵 Low: {result.low_count}")
+            
+            # Check if this is a subscription API
+            with open(api_file, 'r', encoding='utf-8') as f:
+                spec = yaml.safe_load(f)
+            if validator._is_subscription_api(spec):
+                print(f"  📡 Event Subscription API detected - enhanced validation applied")
+                
         except Exception as e:
             print(f"  ❌ Error validating {api_file}: {str(e)}")
             # Create error result
@@ -838,9 +1048,8 @@ def main():
     # Generate reports
     print(f"\n📄 Generating reports in {output_dir}...")
     try:
-        report_filename = generate_report(results, output_dir, repo_name, pr_number)
-        print(f"✅ Reports generated successfully")
-        print(f"📄 Detailed report: {report_filename}")
+        generate_report(results, output_dir)
+        print("✅ Reports generated successfully")
     except Exception as e:
         print(f"❌ Error generating reports: {str(e)}")
         # Still exit successfully - we've done our job of analyzing
@@ -848,11 +1057,7 @@ def main():
     total_critical = sum(r.critical_count for r in results)
     total_medium = sum(r.medium_count for r in results)
     
-    print(f"\n🎯 **Review Complete**")
-    if repo_name:
-        print(f"Repository: {repo_name}")
-    if pr_number:
-        print(f"PR: #{pr_number}")
+    print(f"\n🎯 **Enhanced Review Complete** (Commonalities {commonalities_version})")
     print(f"Critical Issues: {total_critical}")
     print(f"Medium Issues: {total_medium}")
     print(f"Low Issues: {sum(r.low_count for r in results)}")
