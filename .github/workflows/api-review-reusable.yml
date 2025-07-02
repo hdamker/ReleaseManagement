@@ -9,7 +9,8 @@
 #   - Checks out target repository PR branch
 #   - Finds API YAML files in /code/API_definitions/  
 #   - Runs comprehensive automated validation checks
-#   - Generates detailed reports and issue summaries
+#   - Generates detailed reports with unique filenames
+#   - Generates issue summaries with up to 25 items
 # 
 # Called by: api-review-trigger.yml workflow
 # 
@@ -265,6 +266,8 @@ jobs:
           echo "🔍 Searching for API definition files..."
           echo "Using validator: ${{ needs.validate-commonalities-version.outputs.validator_script }}"
           echo "For Commonalities: ${{ inputs.commonalities_version }}"
+          echo "Repository: ${{ inputs.repo_name }}"
+          echo "PR: #${{ inputs.pr_number }}"
           
           # Create output directory
           mkdir -p ./review-output
@@ -273,9 +276,9 @@ jobs:
           echo "📁 Target repository structure:"
           find target-repo -type f -name "*.yaml" -o -name "*.yml" | head -10 || echo "No YAML files found"
           
-          # Run the validation - script now always exits with code 0
+          # Run the validation with repository info for unique filename
           echo "🚀 Starting validation with version-specific validator..."
-          python api_review_validator.py "./target-repo" "${{ inputs.commonalities_version }}" "./review-output"
+          python api_review_validator.py "./target-repo" "${{ inputs.commonalities_version }}" "./review-output" "${{ inputs.repo_name }}" "${{ inputs.pr_number }}"
           
           echo "📊 Validation analysis completed"
           
@@ -299,6 +302,36 @@ jobs:
             echo "review_status=error" >> $GITHUB_OUTPUT
             echo "critical_issues=unknown" >> $GITHUB_OUTPUT
             echo "❌ No summary report generated - validation may have failed"
+          fi
+
+      - name: Find Generated Report File
+        id: find-report
+        if: always()
+        run: |
+          echo "🔍 Looking for generated detailed report..."
+          
+          # Find the generated report file (should be the unique filename)
+          REPORT_FILE=$(find ./review-output -name "camara-api-review_*.md" -type f | head -1)
+          
+          if [[ -n "$REPORT_FILE" ]]; then
+            REPORT_FILENAME=$(basename "$REPORT_FILE")
+            echo "✅ Found detailed report: $REPORT_FILENAME"
+            echo "report_filename=$REPORT_FILENAME" >> $GITHUB_OUTPUT
+            echo "report_path=$REPORT_FILE" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ No unique report file found, checking for fallback..."
+            # Check for any .md files as fallback
+            FALLBACK_FILE=$(find ./review-output -name "*.md" -type f | head -1)
+            if [[ -n "$FALLBACK_FILE" ]]; then
+              FALLBACK_FILENAME=$(basename "$FALLBACK_FILE")
+              echo "📄 Using fallback report: $FALLBACK_FILENAME"
+              echo "report_filename=$FALLBACK_FILENAME" >> $GITHUB_OUTPUT
+              echo "report_path=$FALLBACK_FILE" >> $GITHUB_OUTPUT
+            else
+              echo "❌ No report files found"
+              echo "report_filename=no-report-generated.md" >> $GITHUB_OUTPUT
+              echo "report_path=" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Prepare Summary Output
@@ -339,26 +372,29 @@ jobs:
 
       - name: Upload Detailed Report
         uses: actions/upload-artifact@v4
-        if: always()  # Always upload, even if validation found issues
+        if: always() && steps.find-report.outputs.report_path != ''
         with:
-          name: api-review-detailed-report-${{ inputs.commonalities_version }}
-          path: ./review-output/detailed-report.md
+          name: ${{ steps.find-report.outputs.report_filename }}
+          path: ${{ steps.find-report.outputs.report_path }}
           retention-days: 30
 
       - name: Upload Summary for Comment
         uses: actions/upload-artifact@v4
-        if: always()  # Always upload, even if validation found issues
+        if: always()
         with:
-          name: api-review-summary-${{ inputs.commonalities_version }}
+          name: api-review-summary-${{ inputs.repo_name }}-pr${{ inputs.pr_number }}-${{ inputs.commonalities_version }}
           path: ./review-output/summary.md
           retention-days: 7
 
       - name: Display Review Summary
-        if: always()  # Always display summary, even if validation found issues
+        if: always()
         run: |
           echo "## 📋 API Review Summary"
+          echo "**Repository**: ${{ inputs.repo_name }}"
+          echo "**PR**: #${{ inputs.pr_number }}"
           echo "**Commonalities Version**: ${{ inputs.commonalities_version }}"
           echo "**Validator Used**: ${{ needs.validate-commonalities-version.outputs.validator_script }}"
+          echo "**Report File**: ${{ steps.find-report.outputs.report_filename }}"
           echo ""
           if [ -f "./review-output/summary.md" ]; then
             cat ./review-output/summary.md
