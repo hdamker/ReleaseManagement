@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
 CAMARA API Review Validator - Complete Enhanced Version v0.6
-Automated validation of CAMARA API definitions with comprehensive event subscription support
+Automated validation of CAMARA API definitions with comprehensive consistency checks
 
 Enhanced features:
 - Event subscription and CloudEvents validation
 - Commonalities 0.6 compliance checking
+- Scope naming pattern validation
+- Deep filename consistency checking
+- Project-wide shared schema validation
+- Test definition alignment validation
 - Consolidated checks in summary (not repeated per API)
 - Unique filename generation with repo name, PR number, timestamp
 - Extended summary to 25 items with critical and medium priority
-- Improved issue organization and presentation
-- Work-in-progress version detection
-- Enhanced error response validation
 """
 
 import os
@@ -20,7 +21,7 @@ import yaml
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 import datetime
@@ -60,6 +61,18 @@ class ValidationResult:
     @property
     def low_count(self) -> int:
         return len([i for i in self.issues if i.severity == Severity.LOW])
+
+@dataclass
+class ConsistencyResult:
+    issues: List[ValidationIssue] = field(default_factory=list)
+    checks_performed: List[str] = field(default_factory=list)
+
+@dataclass
+class TestAlignmentResult:
+    api_file: str = ""
+    test_files: List[str] = field(default_factory=list)
+    issues: List[ValidationIssue] = field(default_factory=list)
+    checks_performed: List[str] = field(default_factory=list)
 
 class CAMARAAPIValidator:
     def __init__(self, expected_commonalities_version: str = "0.6"):
@@ -117,6 +130,10 @@ class CAMARAAPIValidator:
             self._check_work_in_progress_version(api_spec, result)
             self._check_updated_generic401(api_spec, result)
             
+            # NEW: Enhanced consistency checks
+            self._check_scope_naming_patterns(api_spec, result)
+            self._check_deep_filename_consistency(file_path, api_spec, result)
+            
             # Event subscription specific checks
             if self._is_subscription_api(api_spec):
                 self._check_event_subscription_compliance(api_spec, result)
@@ -148,6 +165,489 @@ class CAMARAAPIValidator:
             ))
         
         return result
+
+    def validate_project_consistency(self, api_files: List[str]) -> ConsistencyResult:
+        """Check shared schema validation across multiple API files"""
+        result = ConsistencyResult()
+        result.checks_performed.append("Project-wide shared schema validation")
+        
+        if len(api_files) < 2:
+            return result
+            
+        # Load all API specs
+        specs = {}
+        for api_file in api_files:
+            try:
+                with open(api_file, 'r', encoding='utf-8') as f:
+                    specs[api_file] = yaml.safe_load(f)
+            except Exception as e:
+                result.issues.append(ValidationIssue(
+                    Severity.CRITICAL, "File Loading",
+                    f"Failed to load {api_file}: {str(e)}",
+                    api_file
+                ))
+                continue
+        
+        if len(specs) < 2:
+            return result
+            
+        # Define common schemas that should be identical
+        common_schema_names = [
+            'XCorrelator', 'ErrorInfo', 'Device', 'DeviceResponse', 
+            'PhoneNumber', 'NetworkAccessIdentifier', 'DeviceIpv4Addr', 
+            'DeviceIpv6Address', 'SingleIpv4Addr', 'Port', 'Point', 
+            'Latitude', 'Longitude', 'Area', 'AreaType', 'Circle'
+        ]
+        
+        # Check each common schema
+        for schema_name in common_schema_names:
+            self._validate_shared_schema(schema_name, specs, result)
+        
+        # Check license consistency
+        self._validate_license_consistency(specs, result)
+        
+        # Check commonalities version consistency
+        self._validate_commonalities_consistency(specs, result)
+        
+        return result
+
+    def validate_test_alignment(self, api_file: str, test_dir: str) -> TestAlignmentResult:
+        """Validate test definitions alignment with API specs"""
+        result = TestAlignmentResult(api_file=api_file)
+        result.checks_performed.append("Test alignment validation")
+        
+        # Load API spec
+        try:
+            with open(api_file, 'r', encoding='utf-8') as f:
+                api_spec = yaml.safe_load(f)
+        except Exception as e:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "API Loading",
+                f"Failed to load API file: {str(e)}",
+                api_file
+            ))
+            return result
+        
+        # Extract API info
+        api_info = api_spec.get('info', {})
+        api_version = api_info.get('version', '')
+        api_title = api_info.get('title', '')
+        
+        # Extract api-name from filename
+        api_name = Path(api_file).stem
+        
+        # Find test files
+        test_files = self._find_test_files(test_dir, api_name)
+        result.test_files = test_files
+        
+        if not test_files:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Test Files",
+                f"No test files found for API '{api_name}'",
+                test_dir,
+                f"Create either '{api_name}.feature' or '{api_name}-<operationId>.feature' files"
+            ))
+            return result
+        
+        # Extract operation IDs from API
+        api_operations = self._extract_operation_ids(api_spec)
+        
+        # Validate each test file
+        for test_file in test_files:
+            self._validate_test_file(test_file, api_name, api_version, api_title, 
+                                   api_operations, result)
+        
+        return result
+
+    # ===========================================
+    # NEW: Enhanced Consistency Check Functions
+    # ===========================================
+
+    def _check_scope_naming_patterns(self, spec: dict, result: ValidationResult):
+        """Check scope naming follows CAMARA patterns"""
+        result.checks_performed.append("Scope naming pattern validation")
+        
+        # Extract api-name from server URL
+        servers = spec.get('servers', [])
+        if not servers:
+            return
+            
+        server_url = servers[0].get('url', '')
+        api_name_match = re.search(r'/([a-z0-9-]+)/v[\d\w\.]+', server_url)
+        if not api_name_match:
+            return
+            
+        api_name = api_name_match.group(1)
+        
+        # Check if this is a subscription API
+        is_subscription_api = self._is_subscription_api(spec)
+        
+        # Check security scopes in operations
+        paths = spec.get('paths', {})
+        for path, path_obj in paths.items():
+            for method, operation in path_obj.items():
+                if method in ['get', 'post', 'put', 'delete', 'patch']:
+                    security = operation.get('security', [])
+                    for sec_req in security:
+                        for scheme_name, scopes in sec_req.items():
+                            if scheme_name == 'openId':
+                                for scope in scopes:
+                                    self._validate_scope_pattern(scope, api_name, 
+                                                               is_subscription_api, 
+                                                               operation, result)
+
+    def _validate_scope_pattern(self, scope: str, api_name: str, is_subscription_api: bool, 
+                               operation: dict, result: ValidationResult):
+        """Validate individual scope against CAMARA naming patterns"""
+        
+        if is_subscription_api:
+            # For subscription APIs: {api-name}:{event-type}:{action} or {api-name}:{resource}:{action}
+            if scope.startswith(f'{api_name}:org.camaraproject.'):
+                # Event-specific scope: geofencing-subscriptions:org.camaraproject.geofencing-subscriptions.v0.area-entered:create
+                pattern = rf'^{re.escape(api_name)}:org\.camaraproject\.[a-z0-9-]+\.v\d+\.[a-z0-9-]+:(create|read|write|delete)$'
+                if not re.match(pattern, scope):
+                    result.issues.append(ValidationIssue(
+                        Severity.MEDIUM, "Scope Naming",
+                        f"Event-specific scope doesn't follow pattern: {scope}",
+                        f"Expected: {api_name}:org.camaraproject.<api-name>.v<version>.<event-name>:<action>",
+                        "Use correct event-specific scope pattern"
+                    ))
+            elif ':' in scope:
+                # Resource-based scope: geofencing-subscriptions:read
+                parts = scope.split(':')
+                if len(parts) != 2:
+                    result.issues.append(ValidationIssue(
+                        Severity.MEDIUM, "Scope Naming",
+                        f"Subscription scope should have 2 parts: {scope}",
+                        f"Expected: {api_name}:<action>"
+                    ))
+                elif parts[0] != api_name:
+                    result.issues.append(ValidationIssue(
+                        Severity.MEDIUM, "Scope Naming",
+                        f"Scope API name mismatch: expected '{api_name}', got '{parts[0]}'",
+                        f"Use: {api_name}:{parts[1]}"
+                    ))
+                elif parts[1] not in ['create', 'read', 'write', 'delete']:
+                    result.issues.append(ValidationIssue(
+                        Severity.MEDIUM, "Scope Naming",
+                        f"Invalid action in scope: {parts[1]}",
+                        "Use: create, read, write, or delete"
+                    ))
+        else:
+            # For regular APIs: {api-name}:{resource}:{action}
+            parts = scope.split(':')
+            if len(parts) == 2:
+                # Simple scope: api-name:action
+                if parts[0] != api_name:
+                    result.issues.append(ValidationIssue(
+                        Severity.MEDIUM, "Scope Naming",
+                        f"Scope API name mismatch: expected '{api_name}', got '{parts[0]}'",
+                        f"Use: {api_name}:{parts[1]}"
+                    ))
+                elif parts[1] not in ['create', 'read', 'write', 'delete', 'verify', 'retrieve-by-device']:
+                    result.issues.append(ValidationIssue(
+                        Severity.LOW, "Scope Naming",
+                        f"Unusual action in scope: {parts[1]}",
+                        "Consider using standard actions: create, read, write, delete"
+                    ))
+            elif len(parts) == 3:
+                # Resource-based scope: api-name:resource:action
+                if parts[0] != api_name:
+                    result.issues.append(ValidationIssue(
+                        Severity.MEDIUM, "Scope Naming",
+                        f"Scope API name mismatch: expected '{api_name}', got '{parts[0]}'",
+                        f"Use: {api_name}:{parts[1]}:{parts[2]}"
+                    ))
+                elif parts[2] not in ['create', 'read', 'write', 'delete', 'update']:
+                    result.issues.append(ValidationIssue(
+                        Severity.LOW, "Scope Naming",
+                        f"Unusual action in scope: {parts[2]}",
+                        "Consider using standard actions: create, read, write, delete, update"
+                    ))
+            else:
+                result.issues.append(ValidationIssue(
+                    Severity.MEDIUM, "Scope Naming",
+                    f"Scope doesn't follow CAMARA pattern: {scope}",
+                    f"Expected: {api_name}:<action> or {api_name}:<resource>:<action>"
+                ))
+
+    def _check_deep_filename_consistency(self, file_path: str, spec: dict, result: ValidationResult):
+        """Extract api-name from server URL and compare with filename"""
+        result.checks_performed.append("Deep filename consistency validation")
+        
+        filename = Path(file_path).stem
+        
+        # Extract api-name from server URL
+        servers = spec.get('servers', [])
+        if not servers:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Filename Consistency",
+                "No servers object found for filename validation",
+                "servers"
+            ))
+            return
+            
+        server_url = servers[0].get('url', '')
+        
+        # Parse server URL to extract api-name
+        # Pattern: {apiRoot}/api-name/version
+        url_pattern = r'\{[^}]+\}/([a-z0-9-]+)/v[\d\w\.]+'
+        match = re.search(url_pattern, server_url)
+        
+        if not match:
+            result.issues.append(ValidationIssue(
+                Severity.MEDIUM, "Filename Consistency",
+                f"Cannot extract api-name from server URL: {server_url}",
+                "servers[0].url",
+                "Use format: {apiRoot}/api-name/version"
+            ))
+            return
+            
+        url_api_name = match.group(1)
+        
+        # Check exact match
+        if filename != url_api_name:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Filename Consistency",
+                f"Filename '{filename}' doesn't match server URL api-name '{url_api_name}'",
+                file_path,
+                f"Rename file to '{url_api_name}.yaml' or update server URL"
+            ))
+        
+        # Check title consistency with extracted api-name
+        title = spec.get('info', {}).get('title', '')
+        expected_title_words = url_api_name.replace('-', ' ').title()
+        
+        # Convert title to comparable format
+        title_normalized = re.sub(r'\s+', ' ', title.lower().strip())
+        expected_normalized = expected_title_words.lower()
+        
+        if not self._titles_match(title_normalized, expected_normalized):
+            result.issues.append(ValidationIssue(
+                Severity.MEDIUM, "Filename Consistency",
+                f"Title '{title}' doesn't align with api-name '{url_api_name}'",
+                "info.title",
+                f"Consider title that relates to '{expected_title_words}'"
+            ))
+
+    def _titles_match(self, title_normalized: str, expected_normalized: str) -> bool:
+        """Check if titles are reasonably consistent"""
+        # Remove common words and check if main words match
+        common_words = {'api', 'service', 'the', 'a', 'an', 'for', 'and', 'or', 'of', 'on', 'in'}
+        
+        title_words = set(title_normalized.split()) - common_words
+        expected_words = set(expected_normalized.split()) - common_words
+        
+        # Check if there's significant overlap
+        if len(expected_words) == 0:
+            return True
+            
+        overlap = len(title_words & expected_words)
+        return overlap / len(expected_words) >= 0.5
+
+    def _validate_shared_schema(self, schema_name: str, specs: dict, result: ConsistencyResult):
+        """Validate that a shared schema is consistent across files"""
+        schemas_found = {}
+        
+        # Collect schema definitions from all files
+        for file_path, spec in specs.items():
+            schemas = spec.get('components', {}).get('schemas', {})
+            if schema_name in schemas:
+                schemas_found[file_path] = schemas[schema_name]
+        
+        if len(schemas_found) < 2:
+            return  # Schema not used in multiple files
+            
+        # Compare all schemas for consistency
+        reference_file = list(schemas_found.keys())[0]
+        reference_schema = schemas_found[reference_file]
+        
+        for file_path, schema in schemas_found.items():
+            if file_path == reference_file:
+                continue
+                
+            if not self._schemas_equivalent(reference_schema, schema):
+                result.issues.append(ValidationIssue(
+                    Severity.CRITICAL, "Shared Schema Consistency",
+                    f"Schema '{schema_name}' differs between files",
+                    f"{Path(reference_file).name} vs {Path(file_path).name}",
+                    f"Ensure '{schema_name}' schema is identical in all files"
+                ))
+
+    def _schemas_equivalent(self, schema1: dict, schema2: dict) -> bool:
+        """Deep comparison of two schema objects"""
+        # Remove description fields for comparison as they may vary
+        def normalize_schema(schema):
+            if isinstance(schema, dict):
+                normalized = {}
+                for key, value in schema.items():
+                    if key != 'description':  # Allow description differences
+                        normalized[key] = normalize_schema(value)
+                return normalized
+            elif isinstance(schema, list):
+                return [normalize_schema(item) for item in schema]
+            return schema
+        
+        return normalize_schema(schema1) == normalize_schema(schema2)
+
+    def _validate_license_consistency(self, specs: dict, result: ConsistencyResult):
+        """Check that license information is consistent"""
+        licenses = {}
+        
+        for file_path, spec in specs.items():
+            license_info = spec.get('info', {}).get('license', {})
+            if license_info:
+                licenses[file_path] = license_info
+        
+        if len(licenses) < 2:
+            return
+            
+        reference_file = list(licenses.keys())[0]
+        reference_license = licenses[reference_file]
+        
+        for file_path, license_info in licenses.items():
+            if file_path == reference_file:
+                continue
+                
+            if license_info != reference_license:
+                result.issues.append(ValidationIssue(
+                    Severity.MEDIUM, "License Consistency",
+                    "License information differs between files",
+                    f"{Path(reference_file).name} vs {Path(file_path).name}",
+                    "Ensure all files have identical license information"
+                ))
+
+    def _validate_commonalities_consistency(self, specs: dict, result: ConsistencyResult):
+        """Check that commonalities version is consistent"""
+        versions = {}
+        
+        for file_path, spec in specs.items():
+            version = spec.get('info', {}).get('x-camara-commonalities')
+            if version:
+                versions[file_path] = str(version)
+        
+        if len(versions) < 2:
+            return
+            
+        reference_file = list(versions.keys())[0]
+        reference_version = versions[reference_file]
+        
+        for file_path, version in versions.items():
+            if file_path == reference_file:
+                continue
+                
+            if version != reference_version:
+                result.issues.append(ValidationIssue(
+                    Severity.MEDIUM, "Commonalities Consistency",
+                    f"Commonalities version differs: {reference_version} vs {version}",
+                    f"{Path(reference_file).name} vs {Path(file_path).name}",
+                    "Ensure all files use the same commonalities version"
+                ))
+
+    def _find_test_files(self, test_dir: str, api_name: str) -> List[str]:
+        """Find test files for the given API"""
+        test_files = []
+        test_path = Path(test_dir)
+        
+        if not test_path.exists():
+            return test_files
+        
+        # Look for api-name.feature
+        main_test = test_path / f"{api_name}.feature"
+        if main_test.exists():
+            test_files.append(str(main_test))
+        
+        # Look for api-name-*.feature files
+        for test_file in test_path.glob(f"{api_name}-*.feature"):
+            test_files.append(str(test_file))
+        
+        return test_files
+
+    def _extract_operation_ids(self, api_spec: dict) -> List[str]:
+        """Extract all operation IDs from API spec"""
+        operation_ids = []
+        
+        paths = api_spec.get('paths', {})
+        for path, path_obj in paths.items():
+            for method, operation in path_obj.items():
+                if method in ['get', 'post', 'put', 'delete', 'patch']:
+                    operation_id = operation.get('operationId')
+                    if operation_id:
+                        operation_ids.append(operation_id)
+        
+        return operation_ids
+
+    def _validate_test_file(self, test_file: str, api_name: str, api_version: str, 
+                           api_title: str, api_operations: List[str], result: TestAlignmentResult):
+        """Validate individual test file"""
+        try:
+            with open(test_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except Exception as e:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Test File Loading",
+                f"Failed to load test file: {str(e)}",
+                test_file
+            ))
+            return
+        
+        lines = content.split('\n')
+        
+        # Check first line for version
+        if lines:
+            first_line = lines[0].strip()
+            if not self._validate_test_version_line(first_line, api_version, api_title):
+                result.issues.append(ValidationIssue(
+                    Severity.MEDIUM, "Test Version",
+                    f"First line doesn't mention API version {api_version}",
+                    f"{test_file}:1",
+                    f"Include version {api_version} in: {first_line}"
+                ))
+        
+        # Check operation IDs referenced in test
+        test_operations = self._extract_test_operations(content)
+        
+        # Validate that test operations exist in API
+        for test_op in test_operations:
+            if test_op not in api_operations:
+                result.issues.append(ValidationIssue(
+                    Severity.CRITICAL, "Test Operation IDs",
+                    f"Test references unknown operation '{test_op}'",
+                    test_file,
+                    f"Use valid operation ID from: {', '.join(api_operations)}"
+                ))
+        
+        # For operation-specific test files, validate naming
+        test_filename = Path(test_file).stem
+        if test_filename.startswith(f"{api_name}-"):
+            expected_operation = test_filename.replace(f"{api_name}-", "")
+            if expected_operation not in api_operations:
+                result.issues.append(ValidationIssue(
+                    Severity.MEDIUM, "Test File Naming",
+                    f"Test file suggests operation '{expected_operation}' but it doesn't exist in API",
+                    test_file,
+                    f"Use valid operation from: {', '.join(api_operations)}"
+                ))
+
+    def _validate_test_version_line(self, first_line: str, api_version: str, api_title: str) -> bool:
+        """Check if first line contains the API version"""
+        # Look for version pattern in first line
+        version_pattern = r'v?\d+\.\d+\.\d+(?:-rc\.\d+)?'
+        found_versions = re.findall(version_pattern, first_line)
+        
+        return api_version in found_versions
+
+    def _extract_test_operations(self, content: str) -> List[str]:
+        """Extract operation IDs referenced in test content"""
+        # Look for patterns like 'request "operationId"'
+        operation_pattern = r'request\s+"([^"]+)"'
+        operations = re.findall(operation_pattern, content)
+        
+        return list(set(operations))  # Remove duplicates
+
+    # ===========================================
+    # Existing Validation Functions (unchanged)
+    # ===========================================
 
     def _is_subscription_api(self, spec: dict) -> bool:
         """Check if this is an event subscription API"""
@@ -816,21 +1316,7 @@ class CAMARAAPIValidator:
                 file_path,
                 "Use lowercase letters, numbers, and hyphens only"
             ))
-        
-        # Check consistency with server URL (if possible)
-        servers = spec.get('servers', [])
-        if servers:
-            server_url = servers[0].get('url', '')
-            # Extract API name from URL pattern
-            url_match = re.search(r'/([a-z0-9-]+)/v\d+', server_url)
-            if url_match:
-                url_api_name = url_match.group(1)
-                if filename != url_api_name and not filename.startswith(url_api_name):
-                    result.issues.append(ValidationIssue(
-                        Severity.MEDIUM, "File Naming",
-                        f"Filename '{filename}' inconsistent with server URL API name '{url_api_name}'",
-                        file_path
-                    ))
+
 
 def find_api_files(directory: str) -> List[str]:
     """Find all YAML files in the API definitions directory"""
@@ -845,7 +1331,9 @@ def find_api_files(directory: str) -> List[str]:
     
     return [str(f) for f in yaml_files]
 
-def generate_report(results: List[ValidationResult], output_dir: str, repo_name: str = "", pr_number: str = ""):
+def generate_report(results: List[ValidationResult], output_dir: str, repo_name: str = "", pr_number: str = "", 
+                   consistency_result: Optional[ConsistencyResult] = None, 
+                   test_results: List[TestAlignmentResult] = None):
     """Generate comprehensive report and summary with unique filename"""
     os.makedirs(output_dir, exist_ok=True)
     
@@ -863,7 +1351,7 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
     
     # Generate detailed report
     with open(report_path, "w") as f:
-        f.write("# CAMARA API Review - Detailed Report (Enhanced for Commonalities 0.6)\n\n")
+        f.write("# CAMARA API Review - Complete Enhanced Report (Commonalities 0.6)\n\n")
         
         # Add header information
         if repo_name:
@@ -872,12 +1360,24 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
             f.write(f"**Pull Request**: #{pr_number}\n")
         f.write(f"**Generated**: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
         f.write(f"**Report File**: {report_filename}\n")
-        f.write(f"**Validator**: CAMARA API Review Validator v0.6 (Enhanced)\n\n")
+        f.write(f"**Validator**: Enhanced CAMARA API Review Validator v0.6\n\n")
         
         # Summary statistics
         total_critical = sum(r.critical_count for r in results)
         total_medium = sum(r.medium_count for r in results)
         total_low = sum(r.low_count for r in results)
+        
+        # Add consistency and test results to totals
+        if consistency_result:
+            total_critical += len([i for i in consistency_result.issues if i.severity == Severity.CRITICAL])
+            total_medium += len([i for i in consistency_result.issues if i.severity == Severity.MEDIUM])
+            total_low += len([i for i in consistency_result.issues if i.severity == Severity.LOW])
+        
+        if test_results:
+            for test_result in test_results:
+                total_critical += len([i for i in test_result.issues if i.severity == Severity.CRITICAL])
+                total_medium += len([i for i in test_result.issues if i.severity == Severity.MEDIUM])
+                total_low += len([i for i in test_result.issues if i.severity == Severity.LOW])
         
         f.write("## Summary\n\n")
         f.write(f"- **APIs Reviewed**: {len(results)}\n")
@@ -892,6 +1392,13 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
         for result in results:
             all_checks_performed.update(result.checks_performed)
             all_manual_checks.update(result.manual_checks_needed)
+        
+        if consistency_result:
+            all_checks_performed.update(consistency_result.checks_performed)
+        
+        if test_results:
+            for test_result in test_results:
+                all_checks_performed.update(test_result.checks_performed)
         
         # Add consolidated check sections to summary
         if all_checks_performed:
@@ -908,15 +1415,79 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
         
         # Enhanced validation features section
         f.write("## Enhanced Validation Features\n\n")
-        f.write("This review includes enhanced validation for:\n")
+        f.write("This review includes comprehensive validation for:\n")
+        f.write("- **Individual API Files**: OpenAPI compliance, schema validation, security checks\n")
+        f.write("- **Scope Naming Patterns**: CAMARA-compliant security scope validation\n")
+        f.write("- **Deep Filename Consistency**: Alignment between filename, title, and server URL\n")
+        f.write("- **Project Consistency**: Cross-file schema, license, and version consistency\n")
+        f.write("- **Test Alignment**: Validation of test definitions against API specifications\n")
         f.write("- **Event Subscription APIs**: CloudEvents compliance, lifecycle events validation\n")
-        f.write("- **Commonalities 0.6**: Updated error responses, work-in-progress detection\n")
-        f.write("- **Security**: OpenID Connect schemes, forbidden error codes\n")
-        f.write("- **Data Structures**: Device schemas, date-time field descriptions\n")
-        f.write("- **File Standards**: Naming conventions, server URL consistency\n\n")
+        f.write("- **Commonalities 0.6**: Updated error responses, work-in-progress detection\n\n")
+        
+        # Project-wide consistency results
+        if consistency_result and consistency_result.issues:
+            f.write("## Project-Wide Consistency Issues\n\n")
+            
+            critical_consistency = [i for i in consistency_result.issues if i.severity == Severity.CRITICAL]
+            medium_consistency = [i for i in consistency_result.issues if i.severity == Severity.MEDIUM]
+            low_consistency = [i for i in consistency_result.issues if i.severity == Severity.LOW]
+            
+            for severity, issues in [
+                ("🔴 Critical Cross-File Issues", critical_consistency),
+                ("🟡 Medium Cross-File Issues", medium_consistency),
+                ("🔵 Low Cross-File Issues", low_consistency)
+            ]:
+                if issues:
+                    f.write(f"### {severity}\n\n")
+                    for issue in issues:
+                        f.write(f"**{issue.category}**: {issue.description}\n")
+                        if issue.location:
+                            f.write(f"- **Location**: `{issue.location}`\n")
+                        if issue.fix_suggestion:
+                            f.write(f"- **Fix**: {issue.fix_suggestion}\n")
+                        f.write("\n")
+            f.write("---\n\n")
+        
+        # Test alignment results
+        if test_results:
+            f.write("## Test Alignment Results\n\n")
+            
+            for test_result in test_results:
+                api_name = Path(test_result.api_file).stem
+                f.write(f"### {api_name} Test Alignment\n\n")
+                
+                if test_result.test_files:
+                    f.write(f"**Test Files Found**: {len(test_result.test_files)}\n")
+                    for test_file in test_result.test_files:
+                        f.write(f"- `{Path(test_file).name}`\n")
+                    f.write("\n")
+                
+                if test_result.issues:
+                    critical_test = [i for i in test_result.issues if i.severity == Severity.CRITICAL]
+                    medium_test = [i for i in test_result.issues if i.severity == Severity.MEDIUM]
+                    low_test = [i for i in test_result.issues if i.severity == Severity.LOW]
+                    
+                    for severity, issues in [
+                        ("🔴 Critical Test Issues", critical_test),
+                        ("🟡 Medium Test Issues", medium_test),
+                        ("🔵 Low Test Issues", low_test)
+                    ]:
+                        if issues:
+                            f.write(f"#### {severity}\n\n")
+                            for issue in issues:
+                                f.write(f"**{issue.category}**: {issue.description}\n")
+                                if issue.location:
+                                    f.write(f"- **Location**: `{issue.location}`\n")
+                                if issue.fix_suggestion:
+                                    f.write(f"- **Fix**: {issue.fix_suggestion}\n")
+                                f.write("\n")
+                else:
+                    f.write("✅ **No test alignment issues found**\n\n")
+            
+            f.write("---\n\n")
         
         # Detailed results for each API (simplified - no repeated check sections)
-        f.write("## API-Specific Results\n\n")
+        f.write("## Individual API Results\n\n")
         
         for result in results:
             f.write(f"### {result.api_name} (v{result.version})\n\n")
@@ -964,9 +1535,6 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
             f.write("Please ensure YAML files are located in `/code/API_definitions/`\n")
             return report_filename
         
-        total_critical = sum(r.critical_count for r in results)
-        total_medium = sum(r.medium_count for r in results)
-        
         # Overall status
         if total_critical == 0:
             if total_medium == 0:
@@ -988,90 +1556,69 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
         f.write("**Issues Summary**:\n")
         f.write(f"- 🔴 Critical: {total_critical}\n")
         f.write(f"- 🟡 Medium: {total_medium}\n")
-        f.write(f"- 🔵 Low: {sum(r.low_count for r in results)}\n\n")
+        f.write(f"- 🔵 Low: {total_low}\n\n")
         
         # Enhanced issues detail with 25-item limit, prioritizing critical then medium
         if total_critical > 0 or total_medium > 0:
-            # Determine what to show based on count - now using 25 as the limit
-            if total_critical + total_medium <= 25:
-                # Show both critical and medium when total is manageable (≤25)
-                f.write("**Issues Requiring Attention**:\n")
-                
-                # Collect all issues from all APIs with their source
-                all_critical_issues = []
-                all_medium_issues = []
-                
-                for result in results:
-                    critical_issues = [i for i in result.issues if i.severity == Severity.CRITICAL]
-                    medium_issues = [i for i in result.issues if i.severity == Severity.MEDIUM]
-                    
-                    # Add API name to each issue for context
-                    for issue in critical_issues:
-                        all_critical_issues.append((result.api_name, issue))
-                    for issue in medium_issues:
-                        all_medium_issues.append((result.api_name, issue))
-                
-                # Show all critical issues first
-                if all_critical_issues:
-                    f.write(f"\n**🔴 Critical Issues ({len(all_critical_issues)}):**\n")
-                    for api_name, issue in all_critical_issues:
-                        f.write(f"- *{api_name}*: **{issue.category}** - {issue.description}\n")
-                
-                # Fill remaining slots with medium issues
-                remaining_slots = 25 - len(all_critical_issues)
-                medium_to_show = min(len(all_medium_issues), remaining_slots)
-                
-                if medium_to_show > 0:
-                    f.write(f"\n**🟡 Medium Priority Issues ({medium_to_show}):**\n")
-                    for api_name, issue in all_medium_issues[:medium_to_show]:
-                        f.write(f"- *{api_name}*: **{issue.category}** - {issue.description}\n")
-                
-                # Note if there are more medium issues not shown
-                if len(all_medium_issues) > medium_to_show:
-                    f.write(f"\n*Note: {len(all_medium_issues) - medium_to_show} additional medium priority issues found. See detailed report for complete list.*\n")
+            f.write("**Issues Requiring Attention**:\n")
             
-            else:
-                # Too many issues (>25 total) - show critical issues with selective medium
-                f.write("**Critical Issues Requiring Immediate Attention**:\n")
+            # Collect all issues from all sources
+            all_critical_issues = []
+            all_medium_issues = []
+            
+            # From individual API results
+            for result in results:
+                critical_issues = [i for i in result.issues if i.severity == Severity.CRITICAL]
+                medium_issues = [i for i in result.issues if i.severity == Severity.MEDIUM]
                 
-                # Collect all critical issues
-                all_critical_issues = []
-                for result in results:
-                    critical_issues = [i for i in result.issues if i.severity == Severity.CRITICAL]
-                    for issue in critical_issues:
-                        all_critical_issues.append((result.api_name, issue))
+                for issue in critical_issues:
+                    all_critical_issues.append((result.api_name, issue))
+                for issue in medium_issues:
+                    all_medium_issues.append((result.api_name, issue))
+            
+            # From consistency results
+            if consistency_result:
+                critical_issues = [i for i in consistency_result.issues if i.severity == Severity.CRITICAL]
+                medium_issues = [i for i in consistency_result.issues if i.severity == Severity.MEDIUM]
                 
-                # Show critical issues (up to 20 to leave room for some medium)
-                critical_to_show = min(len(all_critical_issues), 20)
-                
-                if critical_to_show > 0:
-                    f.write(f"\n**🔴 Critical Issues ({critical_to_show} of {len(all_critical_issues)}):**\n")
-                    for api_name, issue in all_critical_issues[:critical_to_show]:
-                        f.write(f"- *{api_name}*: **{issue.category}** - {issue.description}\n")
-                
-                # Note if more critical issues exist
-                if len(all_critical_issues) > critical_to_show:
-                    f.write(f"\n*... and {len(all_critical_issues) - critical_to_show} more critical issues*\n")
-                
-                # Show some medium issues if there's room and they exist
-                remaining_slots = 25 - critical_to_show
-                if remaining_slots > 0 and total_medium > 0:
-                    all_medium_issues = []
-                    for result in results:
-                        medium_issues = [i for i in result.issues if i.severity == Severity.MEDIUM]
-                        for issue in medium_issues:
-                            all_medium_issues.append((result.api_name, issue))
+                for issue in critical_issues:
+                    all_critical_issues.append(("Project-wide", issue))
+                for issue in medium_issues:
+                    all_medium_issues.append(("Project-wide", issue))
+            
+            # From test results
+            if test_results:
+                for test_result in test_results:
+                    critical_issues = [i for i in test_result.issues if i.severity == Severity.CRITICAL]
+                    medium_issues = [i for i in test_result.issues if i.severity == Severity.MEDIUM]
                     
-                    medium_to_show = min(len(all_medium_issues), remaining_slots)
-                    if medium_to_show > 0:
-                        f.write(f"\n**🟡 Sample Medium Priority Issues ({medium_to_show} of {len(all_medium_issues)}):**\n")
-                        for api_name, issue in all_medium_issues[:medium_to_show]:
-                            f.write(f"- *{api_name}*: **{issue.category}** - {issue.description}\n")
-                
-                # Add comprehensive note about remaining issues
-                total_not_shown = (total_critical + total_medium) - 25
-                if total_not_shown > 0:
-                    f.write(f"\n*Note: {total_not_shown} additional issues not shown above. See detailed report for complete analysis.*\n")
+                    api_name = Path(test_result.api_file).stem
+                    for issue in critical_issues:
+                        all_critical_issues.append((f"{api_name} Tests", issue))
+                    for issue in medium_issues:
+                        all_medium_issues.append((f"{api_name} Tests", issue))
+            
+            # Show critical issues first (up to 20 to leave room for medium)
+            critical_to_show = min(len(all_critical_issues), 20)
+            
+            if critical_to_show > 0:
+                f.write(f"\n**🔴 Critical Issues ({critical_to_show}):**\n")
+                for source_name, issue in all_critical_issues[:critical_to_show]:
+                    f.write(f"- *{source_name}*: **{issue.category}** - {issue.description}\n")
+            
+            # Show medium issues if there's room
+            remaining_slots = 25 - critical_to_show
+            medium_to_show = min(len(all_medium_issues), remaining_slots)
+            
+            if medium_to_show > 0:
+                f.write(f"\n**🟡 Medium Priority Issues ({medium_to_show}):**\n")
+                for source_name, issue in all_medium_issues[:medium_to_show]:
+                    f.write(f"- *{source_name}*: **{issue.category}** - {issue.description}\n")
+            
+            # Note if there are more issues not shown
+            total_not_shown = (total_critical + total_medium) - 25
+            if total_not_shown > 0:
+                f.write(f"\n*Note: {total_not_shown} additional issues not shown above. See detailed report for complete analysis.*\n")
             
             f.write("\n")
         
@@ -1085,18 +1632,18 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
         
         f.write(f"\n📄 **Detailed Report**: {report_filename}\n")
         f.write("\n📄 **Download**: Available as workflow artifact for complete analysis\n")
-        f.write("\n🔍 **Enhanced Validation**: This review includes Commonalities 0.6 compliance and event subscription validation\n")
+        f.write("\n🔍 **Enhanced Validation**: This review includes scope naming, filename consistency, project consistency, and test alignment validation\n")
     
     # Return the report filename for use by the workflow
     return report_filename
 
 def main():
-    """Main function - always exits with success after reporting findings"""
+    """Main function - enhanced with multi-file and test validation support"""
     if len(sys.argv) < 4:
         print("Usage: python api_review_validator_v0_6.py <repo_directory> <commonalities_version> <output_directory> [repo_name] [pr_number] [additional_args...]")
         print("")
         print("This script analyzes API definitions and reports findings.")
-        print("Enhanced version includes event subscription and CloudEvents validation.")
+        print("Enhanced version includes scope naming, filename consistency, project consistency, and test alignment validation.")
         print("")
         print("Parameters:")
         print("  repo_directory: Path to the repository to analyze")
@@ -1118,7 +1665,7 @@ def main():
         additional_args = sys.argv[6:]
         print(f"📋 Additional arguments (ignored): {additional_args}")
     
-    print(f"🚀 Starting CAMARA API validation (Commonalities {commonalities_version})")
+    print(f"🚀 Starting Enhanced CAMARA API validation (Commonalities {commonalities_version})")
     print(f"📁 Repository directory: {repo_dir}")
     print(f"📊 Output directory: {output_dir}")
     if repo_name:
@@ -1174,14 +1721,52 @@ def main():
             ))
             results.append(error_result)
     
-    print(f"\n📊 Validation analysis completed")
+    # Enhanced: Project-wide consistency validation
+    consistency_result = None
+    if len(api_files) > 1:
+        print(f"\n🔗 Performing project consistency validation...")
+        try:
+            consistency_result = validator.validate_project_consistency(api_files)
+            consistency_critical = len([i for i in consistency_result.issues if i.severity == Severity.CRITICAL])
+            consistency_medium = len([i for i in consistency_result.issues if i.severity == Severity.MEDIUM])
+            consistency_low = len([i for i in consistency_result.issues if i.severity == Severity.LOW])
+            
+            print(f"  🔴 Critical: {consistency_critical}")
+            print(f"  🟡 Medium: {consistency_medium}")
+            print(f"  🔵 Low: {consistency_low}")
+        except Exception as e:
+            print(f"  ❌ Error in consistency validation: {str(e)}")
     
-    # Generate reports
-    print(f"📄 Generating reports in {output_dir}...")
+    # Enhanced: Test alignment validation
+    test_results = []
+    test_dir = os.path.join(repo_dir, "code", "Test_definitions")
+    if os.path.exists(test_dir):
+        print(f"\n🧪 Performing test alignment validation...")
+        for api_file in api_files:
+            try:
+                test_result = validator.validate_test_alignment(api_file, test_dir)
+                test_results.append(test_result)
+                
+                api_name = Path(api_file).stem
+                test_critical = len([i for i in test_result.issues if i.severity == Severity.CRITICAL])
+                test_medium = len([i for i in test_result.issues if i.severity == Severity.MEDIUM])
+                test_low = len([i for i in test_result.issues if i.severity == Severity.LOW])
+                
+                print(f"  {api_name}: 🔴 {test_critical} 🟡 {test_medium} 🔵 {test_low} | Files: {len(test_result.test_files)}")
+            except Exception as e:
+                print(f"  ❌ Error validating tests for {api_file}: {str(e)}")
+    else:
+        print(f"\n📝 No test directory found at {test_dir}")
+    
+    print(f"\n📊 Enhanced validation analysis completed")
+    
+    # Generate reports with enhanced data
+    print(f"📄 Generating enhanced reports in {output_dir}...")
     try:
         # Ensure output directory exists
         os.makedirs(output_dir, exist_ok=True)
-        report_filename = generate_report(results, output_dir, repo_name, pr_number)
+        report_filename = generate_report(results, output_dir, repo_name, pr_number, 
+                                        consistency_result, test_results)
         
         # Verify summary was created
         summary_path = os.path.join(output_dir, "summary.md")
@@ -1190,7 +1775,7 @@ def main():
         else:
             print("❌ Summary report not created - check generate_report function")
             
-        print(f"✅ Reports generated successfully")
+        print(f"✅ Enhanced reports generated successfully")
         print(f"📄 Detailed report: {report_filename}")
         
     except Exception as e:
@@ -1206,20 +1791,36 @@ def main():
         except Exception as fallback_error:
             print(f"❌ Even fallback report failed: {str(fallback_error)}")
     
+    # Calculate totals including consistency and test results
     total_critical = sum(r.critical_count for r in results)
     total_medium = sum(r.medium_count for r in results)
+    total_low = sum(r.low_count for r in results)
+    
+    if consistency_result:
+        total_critical += len([i for i in consistency_result.issues if i.severity == Severity.CRITICAL])
+        total_medium += len([i for i in consistency_result.issues if i.severity == Severity.MEDIUM])
+        total_low += len([i for i in consistency_result.issues if i.severity == Severity.LOW])
+    
+    if test_results:
+        for test_result in test_results:
+            total_critical += len([i for i in test_result.issues if i.severity == Severity.CRITICAL])
+            total_medium += len([i for i in test_result.issues if i.severity == Severity.MEDIUM])
+            total_low += len([i for i in test_result.issues if i.severity == Severity.LOW])
     
     print(f"\n🎯 **Enhanced Review Complete** (Commonalities {commonalities_version})")
     if repo_name:
         print(f"Repository: {repo_name}")
     if pr_number:
         print(f"PR: #{pr_number}")
-    print(f"Critical Issues: {total_critical}")
-    print(f"Medium Issues: {total_medium}")
-    print(f"Low Issues: {sum(r.low_count for r in results)}")
+    print(f"Individual APIs: {len(results)}")
+    print(f"Multi-file Consistency: {'✅ Checked' if consistency_result else '⏭️ Skipped (single file)'}")
+    print(f"Test Alignment: {'✅ Checked' if test_results else '⏭️ Skipped (no tests found)'}")
+    print(f"Total Critical Issues: {total_critical}")
+    print(f"Total Medium Issues: {total_medium}")
+    print(f"Total Low Issues: {total_low}")
     
     # Always exit successfully - we are a reporter, not a judge
-    print("\n📋 Analysis complete. Decision on release readiness is left to the workflow.")
+    print("\n📋 Enhanced analysis complete. Decision on release readiness is left to the workflow.")
     sys.exit(0)
 
 if __name__ == "__main__":
