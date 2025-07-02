@@ -337,20 +337,16 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: Download Review Results
-        uses: actions/download-artifact@v4
-        with:
-          name: api-review-summary
-          path: ./review-results
-
       - name: Post Summary to Issue
         run: |
           ISSUE_NUMBER="${{ needs.validate-input.outputs.issue_number }}"
           
-          # Read summary from artifact
-          if [[ -f "./review-results/summary.md" ]]; then
-            SUMMARY_CONTENT=$(cat ./review-results/summary.md)
-          else
+          # Get summary content from reusable workflow output
+          SUMMARY_CONTENT="${{ needs.call-review-workflow.outputs.summary_content }}"
+          
+          # Check if we have summary content
+          if [[ -z "$SUMMARY_CONTENT" ]]; then
+            echo "⚠️ No summary content received from reusable workflow"
             SUMMARY_CONTENT="❌ **API Review Failed**
 
           The automated review could not be completed. Please check the workflow logs for details."
@@ -386,6 +382,11 @@ jobs:
             -d "$COMMENT_JSON"
           
           echo "✅ Summary posted to issue #${ISSUE_NUMBER}"
+          
+          # Log summary for debugging
+          echo "📋 Posted summary:"
+          echo "Review Status: ${{ needs.call-review-workflow.outputs.review_status }}"
+          echo "Critical Issues: ${{ needs.call-review-workflow.outputs.critical_issues_count }}"
 
       - name: Handle Workflow Failure
         if: needs.call-review-workflow.result == 'failure'
@@ -405,11 +406,16 @@ jobs:
           cat > failure_comment.md << EOF
           ## ❌ API Review Failed
           
-          The automated API review encountered an error and could not complete.
+          The automated API review encountered a workflow error and could not complete.
           
           ${TRIGGER_INFO}
           **Pull Request**: ${{ needs.validate-input.outputs.pull_request_url }}
           **Workflow Run**: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          
+          **Error Details:**
+          - Reusable workflow failed to execute
+          - Check the workflow logs for detailed error information
+          - This may be due to script errors, missing dependencies, or GitHub Actions issues
           
           Please check the workflow logs and retry the review.
           EOF
@@ -422,3 +428,5 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             "${{ github.api_url }}/repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
             -d "$COMMENT_JSON"
+          
+          echo "✅ Failure notification posted to issue #${ISSUE_NUMBER}"

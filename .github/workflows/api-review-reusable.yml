@@ -51,10 +51,24 @@ on:
       issue_number:
         required: true
         type: string
+    outputs:
+      summary_content:
+        description: "The review summary content for posting to issues"
+        value: ${{ jobs.api-review.outputs.summary_content }}
+      review_status:
+        description: "Overall review status (success, has_critical_issues, error)"
+        value: ${{ jobs.api-review.outputs.review_status }}
+      critical_issues_count:
+        description: "Number of critical issues found"
+        value: ${{ jobs.api-review.outputs.critical_issues_count }}
 
 jobs:
   api-review:
     runs-on: ubuntu-latest
+    outputs:
+      summary_content: ${{ steps.prepare-summary.outputs.summary_content }}
+      review_status: ${{ steps.review.outputs.review_status }}
+      critical_issues_count: ${{ steps.review.outputs.critical_issues }}
     steps:
       - name: Setup Review Environment
         run: |
@@ -214,6 +228,42 @@ jobs:
             echo "review_status=error" >> $GITHUB_OUTPUT
             echo "critical_issues=unknown" >> $GITHUB_OUTPUT
             echo "❌ No summary report generated - validation may have failed"
+          fi
+
+      - name: Prepare Summary Output
+        id: prepare-summary
+        if: always()  # Always run to ensure we have summary content
+        run: |
+          echo "📋 Preparing summary output for workflow communication..."
+          
+          if [[ -f "./review-output/summary.md" ]]; then
+            echo "✅ Summary file found, reading content..."
+            
+            # Read the summary content and encode it properly for GitHub output
+            SUMMARY_CONTENT=$(cat ./review-output/summary.md)
+            
+            # Use heredoc to properly handle multiline content
+            {
+              echo 'summary_content<<EOF'
+              cat ./review-output/summary.md
+              echo 'EOF'
+            } >> $GITHUB_OUTPUT
+            
+            echo "✅ Summary content prepared for output"
+          else
+            echo "❌ No summary file found, creating error summary..."
+            
+            ERROR_SUMMARY="❌ **API Review Failed**
+
+          The automated review could not be completed. Please check the workflow logs for details."
+            
+            {
+              echo 'summary_content<<EOF'
+              echo "$ERROR_SUMMARY"
+              echo 'EOF'
+            } >> $GITHUB_OUTPUT
+            
+            echo "⚠️ Error summary prepared for output"
           fi
 
       - name: Upload Detailed Report
