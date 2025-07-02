@@ -1,8 +1,11 @@
 # .github/workflows/api-review-reusable.yml
 # 
-# CAMARA API Review - Reusable Workflow
+# CAMARA API Review - Reusable Workflow (Version-Specific)
 # 
 # Purpose: Performs automated validation of CAMARA API definitions against compliance checklist.
+#   - Validates commonalities version support
+#   - Uses version-specific validator scripts
+#   - Currently supports Commonalities 0.6 only
 #   - Checks out target repository PR branch
 #   - Finds API YAML files in /code/API_definitions/  
 #   - Runs comprehensive automated validation checks
@@ -54,17 +57,63 @@ on:
     outputs:
       summary_content:
         description: "The review summary content for posting to issues"
-        value: ${{ jobs.api-review.outputs.summary_content }}
+        value: ${{ jobs.provide-outputs.outputs.summary_content }}
       review_status:
         description: "Overall review status (success, has_critical_issues, error)"
-        value: ${{ jobs.api-review.outputs.review_status }}
+        value: ${{ jobs.provide-outputs.outputs.review_status }}
       critical_issues_count:
         description: "Number of critical issues found"
-        value: ${{ jobs.api-review.outputs.critical_issues_count }}
+        value: ${{ jobs.provide-outputs.outputs.critical_issues_count }}
 
 jobs:
+  validate-commonalities-version:
+    runs-on: ubuntu-latest
+    outputs:
+      validator_script: ${{ steps.determine-validator.outputs.validator_script }}
+      version_supported: ${{ steps.determine-validator.outputs.version_supported }}
+      error_message: ${{ steps.determine-validator.outputs.error_message }}
+    steps:
+      - name: Validate Commonalities Version Support
+        id: determine-validator
+        run: |
+          COMMONALITIES_VERSION="${{ inputs.commonalities_version }}"
+          
+          echo "🔍 Validating Commonalities version: $COMMONALITIES_VERSION"
+          
+          # Define supported versions and their corresponding validator scripts
+          case "$COMMONALITIES_VERSION" in
+            "0.6")
+              echo "✅ Commonalities 0.6 is supported"
+              echo "validator_script=api_review_validator_v0_6.py" >> $GITHUB_OUTPUT
+              echo "version_supported=true" >> $GITHUB_OUTPUT
+              echo "error_message=" >> $GITHUB_OUTPUT
+              ;;
+            "0.7"|"0.8"|"0.9"|"1.0")
+              echo "❌ Commonalities $COMMONALITIES_VERSION is not yet supported"
+              echo "validator_script=" >> $GITHUB_OUTPUT
+              echo "version_supported=false" >> $GITHUB_OUTPUT
+              echo "error_message=Commonalities version $COMMONALITIES_VERSION is not yet supported. Currently supported versions: 0.6" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "❌ Unknown Commonalities version: $COMMONALITIES_VERSION"
+              echo "validator_script=" >> $GITHUB_OUTPUT
+              echo "version_supported=false" >> $GITHUB_OUTPUT
+              echo "error_message=Unknown Commonalities version '$COMMONALITIES_VERSION'. Supported versions: 0.6" >> $GITHUB_OUTPUT
+              ;;
+          esac
+          
+          echo ""
+          echo "📋 Version validation results:"
+          echo "  Version: $COMMONALITIES_VERSION"
+          echo "  Supported: $([ '${{ steps.determine-validator.outputs.version_supported }}' = 'true' ] && echo 'Yes' || echo 'No')"
+          if [[ "${{ steps.determine-validator.outputs.validator_script }}" != "" ]]; then
+            echo "  Validator: ${{ steps.determine-validator.outputs.validator_script }}"
+          fi
+
   api-review:
     runs-on: ubuntu-latest
+    needs: validate-commonalities-version
+    if: needs.validate-commonalities-version.outputs.version_supported == 'true'
     outputs:
       summary_content: ${{ steps.prepare-summary.outputs.summary_content }}
       review_status: ${{ steps.review.outputs.review_status }}
@@ -81,7 +130,8 @@ jobs:
           echo "Base Ref: ${{ inputs.pr_base_ref }}"
           echo "Base Repo: ${{ inputs.pr_base_repo }}"
           echo "Review Type: ${{ inputs.review_type }}"
-          echo "Expected Commonalities: ${{ inputs.commonalities_version }}"
+          echo "Commonalities Version: ${{ inputs.commonalities_version }}"
+          echo "Validator Script: ${{ needs.validate-commonalities-version.outputs.validator_script }}"
           echo "Workflow Repository: ${{ github.repository }}"
 
       - name: Checkout Workflow Repository
@@ -147,21 +197,27 @@ jobs:
           pip install --upgrade pip
           pip install pyyaml jsonschema openapi-spec-validator requests
 
-      - name: Locate API Validator Script
+      - name: Locate Version-Specific API Validator Script
         run: |
-          echo "🔍 Looking for API validator script..."
-          echo "Workflow repository: ${{ github.repository }}"
-          echo "Expected script location: review-tools/scripts/api_review_validator.py"
+          VALIDATOR_SCRIPT="${{ needs.validate-commonalities-version.outputs.validator_script }}"
+          COMMONALITIES_VERSION="${{ inputs.commonalities_version }}"
           
-          # Check if the script exists in the checked-out workflow repository
-          if [[ -f "review-tools/scripts/api_review_validator.py" ]]; then
-            echo "✅ Found validator script in workflow repository"
-            cp review-tools/scripts/api_review_validator.py ./
+          echo "🔍 Looking for version-specific API validator script..."
+          echo "Commonalities Version: $COMMONALITIES_VERSION"
+          echo "Expected Validator: $VALIDATOR_SCRIPT"
+          echo "Workflow Repository: ${{ github.repository }}"
+          echo "Expected Script Location: review-tools/scripts/$VALIDATOR_SCRIPT"
+          
+          # Check if the version-specific script exists in the checked-out workflow repository
+          if [[ -f "review-tools/scripts/$VALIDATOR_SCRIPT" ]]; then
+            echo "✅ Found version-specific validator script: $VALIDATOR_SCRIPT"
+            cp "review-tools/scripts/$VALIDATOR_SCRIPT" ./api_review_validator.py
           else
-            echo "❌ API Validator script not found!"
+            echo "❌ Version-specific API Validator script not found!"
             echo ""
-            echo "Expected location: review-tools/scripts/api_review_validator.py"
+            echo "Expected location: review-tools/scripts/$VALIDATOR_SCRIPT"
             echo "Workflow repository: ${{ github.repository }}"
+            echo "Commonalities version: $COMMONALITIES_VERSION"
             echo ""
             echo "📁 Checking directory structure:"
             if [[ -d "review-tools" ]]; then
@@ -174,8 +230,15 @@ jobs:
               echo "review-tools directory does not exist"
             fi
             echo ""
-            echo "Please ensure the api_review_validator.py script exists at:"
-            echo "  ${{ github.repository }}/scripts/api_review_validator.py"
+            echo "🔧 Available validator scripts:"
+            find review-tools -name "api_review_validator*.py" 2>/dev/null || echo "No validator scripts found"
+            echo ""
+            echo "Please ensure the version-specific validator script exists at:"
+            echo "  ${{ github.repository }}/scripts/$VALIDATOR_SCRIPT"
+            echo ""
+            echo "📋 Supported Commonalities versions and their scripts:"
+            echo "  - 0.6: api_review_validator_v0_6.py"
+            echo "  - Future versions will have their own scripts"
             exit 1
           fi
           
@@ -185,15 +248,23 @@ jobs:
           # Verify the script is working
           echo "🧪 Testing validator script..."
           if python api_review_validator.py 2>&1 | grep -q "Usage:" || [[ $? -eq 1 ]]; then
-            echo "✅ Validator script is accessible"
+            echo "✅ Validator script is accessible and functional"
           else
             echo "⚠️ Validator script may have issues, but continuing..."
           fi
+          
+          echo ""
+          echo "📋 Validator Setup Complete:"
+          echo "  Script: $VALIDATOR_SCRIPT"
+          echo "  Target Commonalities: $COMMONALITIES_VERSION"
+          echo "  Local Name: api_review_validator.py"
 
       - name: Run API Review
         id: review
         run: |
           echo "🔍 Searching for API definition files..."
+          echo "Using validator: ${{ needs.validate-commonalities-version.outputs.validator_script }}"
+          echo "For Commonalities: ${{ inputs.commonalities_version }}"
           
           # Create output directory
           mkdir -p ./review-output
@@ -203,7 +274,7 @@ jobs:
           find target-repo -type f -name "*.yaml" -o -name "*.yml" | head -10 || echo "No YAML files found"
           
           # Run the validation - script now always exits with code 0
-          echo "🚀 Starting validation..."
+          echo "🚀 Starting validation with version-specific validator..."
           python api_review_validator.py "./target-repo" "${{ inputs.commonalities_version }}" "./review-output"
           
           echo "📊 Validation analysis completed"
@@ -270,7 +341,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()  # Always upload, even if validation found issues
         with:
-          name: api-review-detailed-report
+          name: api-review-detailed-report-${{ inputs.commonalities_version }}
           path: ./review-output/detailed-report.md
           retention-days: 30
 
@@ -278,7 +349,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()  # Always upload, even if validation found issues
         with:
-          name: api-review-summary
+          name: api-review-summary-${{ inputs.commonalities_version }}
           path: ./review-output/summary.md
           retention-days: 7
 
@@ -286,6 +357,9 @@ jobs:
         if: always()  # Always display summary, even if validation found issues
         run: |
           echo "## 📋 API Review Summary"
+          echo "**Commonalities Version**: ${{ inputs.commonalities_version }}"
+          echo "**Validator Used**: ${{ needs.validate-commonalities-version.outputs.validator_script }}"
+          echo ""
           if [ -f "./review-output/summary.md" ]; then
             cat ./review-output/summary.md
           else
@@ -298,6 +372,8 @@ jobs:
         run: |
           EXIT_CODE="${{ steps.review.outputs.validation_exit_code }}"
           echo "🎯 API Review Results:"
+          echo "   Commonalities Version: ${{ inputs.commonalities_version }}"
+          echo "   Validator Used: ${{ needs.validate-commonalities-version.outputs.validator_script }}"
           echo "   Exit Code: $EXIT_CODE"
           
           if [ "$EXIT_CODE" = "0" ]; then
@@ -310,3 +386,106 @@ jobs:
             echo "This workflow failure is intentional to prevent release with critical issues."
             exit 1
           fi
+
+  handle-unsupported-version:
+    runs-on: ubuntu-latest
+    needs: validate-commonalities-version
+    if: needs.validate-commonalities-version.outputs.version_supported == 'false'
+    outputs:
+      summary_content: ${{ steps.create-error-summary.outputs.summary_content }}
+      review_status: "error"
+      critical_issues_count: "N/A"
+    steps:
+      - name: Create Version Error Summary
+        id: create-error-summary
+        run: |
+          COMMONALITIES_VERSION="${{ inputs.commonalities_version }}"
+          ERROR_MESSAGE="${{ needs.validate-commonalities-version.outputs.error_message }}"
+          
+          echo "❌ Creating error summary for unsupported version"
+          echo "Version requested: $COMMONALITIES_VERSION"
+          echo "Error: $ERROR_MESSAGE"
+          
+          # Create error summary content
+          ERROR_SUMMARY="❌ **Unsupported Commonalities Version**
+
+          **Error**: $ERROR_MESSAGE
+
+          **Requested Version**: \`$COMMONALITIES_VERSION\`
+          **Currently Supported**: \`0.6\`
+
+          **What to do:**
+          1. **For Commonalities 0.6**: Change the version parameter to \`0.6\`
+          2. **For other versions**: Wait for support to be added or contact the maintainers
+
+          **Upcoming Support:**
+          - 📅 Commonalities 0.7: Planned
+          - 📅 Commonalities 0.8: Planned  
+          - 📅 Commonalities 1.0: Planned
+
+          **Manual Review Required**: Please use the manual review process for unsupported Commonalities versions."
+          
+          # Use heredoc to properly handle multiline content
+          {
+            echo 'summary_content<<EOF'
+            echo "$ERROR_SUMMARY"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+          
+          echo "✅ Error summary prepared for unsupported version"
+
+      - name: Display Version Error
+        run: |
+          echo "## ❌ Unsupported Commonalities Version"
+          echo ""
+          echo "**Requested**: ${{ inputs.commonalities_version }}"
+          echo "**Supported**: 0.6"
+          echo ""
+          echo "${{ needs.validate-commonalities-version.outputs.error_message }}"
+          echo ""
+          echo "Please update the workflow parameters to use a supported version."
+
+  # Meta job to provide consistent outputs regardless of which path was taken
+  provide-outputs:
+    runs-on: ubuntu-latest
+    needs: [validate-commonalities-version, api-review, handle-unsupported-version]
+    if: always()
+    outputs:
+      summary_content: ${{ steps.determine-outputs.outputs.summary_content }}
+      review_status: ${{ steps.determine-outputs.outputs.review_status }}
+      critical_issues_count: ${{ steps.determine-outputs.outputs.critical_issues_count }}
+    steps:
+      - name: Determine Final Outputs
+        id: determine-outputs
+        run: |
+          echo "🔍 Determining final workflow outputs..."
+          
+          if [[ "${{ needs.validate-commonalities-version.outputs.version_supported }}" == "true" ]]; then
+            # Version was supported, use api-review job outputs
+            echo "✅ Using outputs from successful API review"
+            SUMMARY_CONTENT="${{ needs.api-review.outputs.summary_content }}"
+            REVIEW_STATUS="${{ needs.api-review.outputs.review_status }}"
+            CRITICAL_ISSUES="${{ needs.api-review.outputs.critical_issues_count }}"
+          else
+            # Version was not supported, use error handler outputs  
+            echo "❌ Using outputs from version error handler"
+            SUMMARY_CONTENT="${{ needs.handle-unsupported-version.outputs.summary_content }}"
+            REVIEW_STATUS="error"
+            CRITICAL_ISSUES="N/A"
+          fi
+          
+          # Set final outputs
+          {
+            echo 'summary_content<<EOF'
+            echo "$SUMMARY_CONTENT"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+          
+          echo "review_status=$REVIEW_STATUS" >> $GITHUB_OUTPUT
+          echo "critical_issues_count=$CRITICAL_ISSUES" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "📋 Final Workflow Results:"
+          echo "  Version Supported: ${{ needs.validate-commonalities-version.outputs.version_supported }}"
+          echo "  Review Status: $REVIEW_STATUS"
+          echo "  Critical Issues: $CRITICAL_ISSUES"
