@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-CAMARA API Review Validator
+CAMARA API Review Validator - Updated Version
 Automated validation of CAMARA API definitions based on the comprehensive checklist
 
 This script analyzes API definitions and reports findings, but does not judge
 whether findings constitute a "failure" - that decision is left to the workflow.
+
+Enhanced with improved summary logic to show medium issues when manageable.
 """
 
 import os
@@ -639,17 +641,50 @@ def generate_report(results: List[ValidationResult], output_dir: str):
         f.write(f"- 🟡 Medium: {total_medium}\n")
         f.write(f"- 🔵 Low: {sum(r.low_count for r in results)}\n\n")
         
-        # Critical issues detail
-        if total_critical > 0:
-            f.write("**Critical Issues Requiring Immediate Attention**:\n")
-            for result in results:
-                critical_issues = [i for i in result.issues if i.severity == Severity.CRITICAL]
-                if critical_issues:
-                    f.write(f"\n*{result.api_name}*:\n")
-                    for issue in critical_issues[:3]:  # Limit to first 3
-                        f.write(f"- {issue.category}: {issue.description}\n")
-                    if len(critical_issues) > 3:
-                        f.write(f"- ... and {len(critical_issues) - 3} more\n")
+        # Enhanced issues detail with smart medium issue inclusion
+        if total_critical > 0 or (total_critical + total_medium < 10 and total_medium > 0):
+            # Determine what to show based on count
+            if total_critical + total_medium < 10:
+                # Show both critical and medium when total is manageable
+                f.write("**Issues Requiring Attention**:\n")
+                
+                # Show critical issues first
+                for result in results:
+                    critical_issues = [i for i in result.issues if i.severity == Severity.CRITICAL]
+                    medium_issues = [i for i in result.issues if i.severity == Severity.MEDIUM]
+                    
+                    if critical_issues or medium_issues:
+                        f.write(f"\n*{result.api_name}*:\n")
+                        
+                        # Show all critical issues
+                        for issue in critical_issues:
+                            f.write(f"- 🔴 **{issue.category}**: {issue.description}\n")
+                        
+                        # Show medium issues if space allows
+                        remaining_slots = 10 - total_critical
+                        medium_to_show = min(len(medium_issues), remaining_slots)
+                        
+                        for issue in medium_issues[:medium_to_show]:
+                            f.write(f"- 🟡 **{issue.category}**: {issue.description}\n")
+                        
+                        if len(medium_issues) > medium_to_show:
+                            f.write(f"- 🟡 ... and {len(medium_issues) - medium_to_show} more medium priority issues\n")
+            else:
+                # Only show critical issues when there are too many total issues
+                f.write("**Critical Issues Requiring Immediate Attention**:\n")
+                for result in results:
+                    critical_issues = [i for i in result.issues if i.severity == Severity.CRITICAL]
+                    if critical_issues:
+                        f.write(f"\n*{result.api_name}*:\n")
+                        for issue in critical_issues[:3]:  # Limit to first 3
+                            f.write(f"- {issue.category}: {issue.description}\n")
+                        if len(critical_issues) > 3:
+                            f.write(f"- ... and {len(critical_issues) - 3} more\n")
+                
+                # Add note about medium issues
+                if total_medium > 0:
+                    f.write(f"\n*Note: {total_medium} medium priority issues also found. See detailed report for complete list.*\n")
+            
             f.write("\n")
         
         # Recommendation
