@@ -368,13 +368,18 @@ def main():
     print(f"🐍 Python version: {sys.version}")
     print(f"📁 Current working directory: {os.getcwd()}")
     
-    if len(sys.argv) != 4:
-        print("❌ Usage: python api_review_validator_v0_6.py <repo_directory> <commonalities_version> <output_directory>")
+    if len(sys.argv) < 4:
+        print("❌ Usage: python api_review_validator_v0_6.py <repo_directory> <commonalities_version> <output_directory> [additional_args...]")
         sys.exit(0)
     
     repo_dir = sys.argv[1]
     commonalities_version = sys.argv[2]
     output_dir = sys.argv[3]
+    
+    # Log any additional arguments
+    if len(sys.argv) > 4:
+        additional_args = sys.argv[4:]
+        print(f"📋 Additional arguments (ignored): {additional_args}")
     
     print(f"📁 Repository directory: {repo_dir}")
     print(f"🏷️ Commonalities version: {commonalities_version}")
