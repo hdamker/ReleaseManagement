@@ -337,20 +337,37 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     steps:
+      - name: Create Summary Content File
+        run: |
+          # Write the summary content to a file to avoid bash interpretation issues
+          cat > summary_content.md << 'SUMMARY_EOF'
+          ${{ needs.call-review-workflow.outputs.summary_content }}
+          SUMMARY_EOF
+          
+          # Check if we have valid content, if not create fallback
+          if [[ ! -s summary_content.md ]] || [[ $(wc -l < summary_content.md) -lt 2 ]]; then
+            echo "⚠️ No valid summary content received, creating fallback..."
+            cat > summary_content.md << 'FALLBACK_EOF'
+          ❌ **API Review Failed**
+          
+          The automated review could not be completed. Please check the workflow logs for details.
+          
+          **Debug Information:**
+          - Review Status: ${{ needs.call-review-workflow.outputs.review_status }}
+          - Critical Issues: ${{ needs.call-review-workflow.outputs.critical_issues_count }}
+          FALLBACK_EOF
+          fi
+          
+          echo "📋 Summary content file created:"
+          wc -l summary_content.md
+          echo "First few lines:"
+          head -5 summary_content.md
+
       - name: Post Summary to Issue
         run: |
           ISSUE_NUMBER="${{ needs.validate-input.outputs.issue_number }}"
           
-          # Get summary content from reusable workflow output
-          SUMMARY_CONTENT="${{ needs.call-review-workflow.outputs.summary_content }}"
-          
-          # Check if we have summary content
-          if [[ -z "$SUMMARY_CONTENT" ]]; then
-            echo "⚠️ No summary content received from reusable workflow"
-            SUMMARY_CONTENT="❌ **API Review Failed**
-
-          The automated review could not be completed. Please check the workflow logs for details."
-          fi
+          echo "📋 Preparing to post summary to issue #${ISSUE_NUMBER}..."
           
           # Create comment body with trigger source indicator
           TRIGGER_INFO=""
@@ -360,7 +377,7 @@ jobs:
             TRIGGER_INFO="**Triggered by**: Manual workflow dispatch"
           fi
           
-          # Create properly formatted comment body using a temp file to preserve formatting
+          # Create the comment header
           cat > comment_body.md << EOF
           ## 🤖 Automated CAMARA API Review Results
           
@@ -369,24 +386,47 @@ jobs:
           **Review Type**: ${{ needs.validate-input.outputs.review_type }}
           **Workflow Run**: [View Details](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
           
-          ${SUMMARY_CONTENT}
           EOF
           
-          # Post comment to issue using the properly formatted body
-          COMMENT_JSON=$(jq -n --rawfile body comment_body.md '{body: $body}')
+          # Append the summary content from the file
+          cat summary_content.md >> comment_body.md
           
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "${{ github.api_url }}/repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
-            -d "$COMMENT_JSON"
+          # Debug: Show what we're about to post
+          echo "📋 Final comment content:"
+          echo "Lines: $(wc -l < comment_body.md)"
+          echo "Characters: $(wc -c < comment_body.md)"
+          echo ""
+          echo "Preview (first 10 lines):"
+          head -10 comment_body.md
+          echo "..."
+          
+          # Post comment to issue using the properly formatted body
+          if command -v jq > /dev/null; then
+            COMMENT_JSON=$(jq -n --rawfile body comment_body.md '{body: $body}')
+            
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "${{ github.api_url }}/repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
+              -d "$COMMENT_JSON"
+          else
+            echo "❌ jq not available, using alternative method"
+            # Fallback method without jq
+            COMMENT_BODY=$(cat comment_body.md | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "${{ github.api_url }}/repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
+              -d "{\"body\":\"$COMMENT_BODY\"}"
+          fi
           
           echo "✅ Summary posted to issue #${ISSUE_NUMBER}"
           
-          # Log summary for debugging
-          echo "📋 Posted summary:"
-          echo "Review Status: ${{ needs.call-review-workflow.outputs.review_status }}"
-          echo "Critical Issues: ${{ needs.call-review-workflow.outputs.critical_issues_count }}"
+          # Log additional debug information
+          echo "📋 Debug Summary:"
+          echo "  Review Status: ${{ needs.call-review-workflow.outputs.review_status }}"
+          echo "  Critical Issues: ${{ needs.call-review-workflow.outputs.critical_issues_count }}"
+          echo "  Comment Length: $(wc -c < comment_body.md) characters"
 
       - name: Handle Workflow Failure
         if: needs.call-review-workflow.result == 'failure'
