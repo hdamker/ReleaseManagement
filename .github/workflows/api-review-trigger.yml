@@ -4,10 +4,11 @@
 # 
 # Purpose: Entry point for automated CAMARA API compliance reviews. Can be triggered by:
 #   - Issue comments starting with "/rc-api-review" (extracts PR URL from issue description)
+#   - Issue comments starting with "/wip-api-review" (reviews main branch or PR head)
 #   - Manual workflow dispatch with custom parameters
 # 
 # Repository Configuration:
-#   - Repo owners can modify TOOLING_REPOSITORY below to use their own tooling
+#   - Repo owners can modify the "uses" field below to use their own tooling
 #   - Default: camaraproject/tooling (official tooling)
 #   - Custom example: myuser/tooling (for testing custom tooling)
 # 
@@ -17,11 +18,6 @@
 # Results will be posted to: Issues/PRs in the SAME repository
 
 name: 'CAMARA API Review Trigger'
-
-# 🔧 CONFIGURATION: Repo owners can modify this to use their own tooling repository
-env:
-  TOOLING_REPOSITORY: camaraproject/tooling  # Change this line for fork testing
-  TOOLING_VERSION: main                      # Change this line for version testing
 
 on:
   workflow_dispatch:
@@ -248,7 +244,6 @@ jobs:
           - Commonalities Version: 0.6
           - Repository: ${{ github.repository }}
           - Trigger: \`/$TRIGGER_COMMAND\`
-          - Tooling: ${{ env.TOOLING_REPOSITORY }}
           
           **Version Support:**
           - ✅ Commonalities 0.6: Fully supported
@@ -286,17 +281,15 @@ jobs:
       repo_owner: ${{ steps.parse.outputs.repo_owner }}
       repo_name: ${{ steps.parse.outputs.repo_name }}
       pr_number: ${{ steps.parse.outputs.pr_number }}
-      pr_head_sha: ${{ needs.validate-input.outputs.final_pr_head_sha }}
-      pr_head_ref: ${{ needs.validate-input.outputs.final_pr_head_ref }}
-      pr_head_repo: ${{ needs.validate-input.outputs.final_pr_head_repo }}
-      pr_base_ref: ${{ needs.validate-input.outputs.final_pr_base_ref }}
-      pr_base_repo: ${{ needs.validate-input.outputs.final_pr_base_repo }}
       pull_request_url: ${{ steps.determine-inputs.outputs.pull_request_url }}
       issue_number: ${{ steps.determine-inputs.outputs.issue_number }}
+      pr_number_for_comment: ${{ steps.determine-inputs.outputs.pr_number_for_comment }}
       review_type: ${{ steps.determine-inputs.outputs.review_type }}
       commonalities_version: ${{ steps.determine-inputs.outputs.commonalities_version }}
-      tooling_repo: ${{ steps.discover-tooling.outputs.tooling_repo }}
-      workflow_location: ${{ steps.discover-tooling.outputs.workflow_location }}
+      result_target: ${{ steps.determine-inputs.outputs.result_target }}
+      is_main_branch: ${{ steps.determine-inputs.outputs.is_main_branch }}
+      target_branch: ${{ steps.determine-inputs.outputs.target_branch }}
+      target_repo: ${{ steps.determine-inputs.outputs.target_repo }}
       final_pr_head_sha: ${{ steps.final-outputs.outputs.final_pr_head_sha }}
       final_pr_head_ref: ${{ steps.final-outputs.outputs.final_pr_head_ref }}
       final_pr_head_repo: ${{ steps.final-outputs.outputs.final_pr_head_repo }}
@@ -306,18 +299,28 @@ jobs:
       - name: Determine Input Source
         id: determine-inputs
         run: |
-          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "📝 Using inputs from manual dispatch"
+            echo "pull_request_url=${{ github.event.inputs.pull_request_url }}" >> $GITHUB_OUTPUT
+            echo "issue_number=" >> $GITHUB_OUTPUT
+            echo "pr_number_for_comment=" >> $GITHUB_OUTPUT
+            echo "review_type=${{ github.event.inputs.review_type }}" >> $GITHUB_OUTPUT
+            echo "commonalities_version=${{ github.event.inputs.commonalities_version }}" >> $GITHUB_OUTPUT
+            echo "result_target=manual" >> $GITHUB_OUTPUT
+            echo "is_main_branch=false" >> $GITHUB_OUTPUT
+            echo "target_branch=" >> $GITHUB_OUTPUT
+            echo "target_repo=" >> $GITHUB_OUTPUT
+          else
             echo "📝 Using inputs from comment trigger"
             echo "pull_request_url=${{ needs.check-comment-trigger.outputs.pull_request_url }}" >> $GITHUB_OUTPUT
             echo "issue_number=${{ needs.check-comment-trigger.outputs.issue_number }}" >> $GITHUB_OUTPUT
+            echo "pr_number_for_comment=${{ needs.check-comment-trigger.outputs.pr_number }}" >> $GITHUB_OUTPUT
             echo "review_type=${{ needs.check-comment-trigger.outputs.review_type }}" >> $GITHUB_OUTPUT
             echo "commonalities_version=${{ needs.check-comment-trigger.outputs.commonalities_version }}" >> $GITHUB_OUTPUT
-          else
-            echo "📝 Using inputs from manual dispatch"
-            echo "pull_request_url=${{ github.event.inputs.pull_request_url }}" >> $GITHUB_OUTPUT
-            echo "issue_number=${{ github.event.inputs.issue_number }}" >> $GITHUB_OUTPUT
-            echo "review_type=${{ github.event.inputs.review_type }}" >> $GITHUB_OUTPUT
-            echo "commonalities_version=${{ github.event.inputs.commonalities_version }}" >> $GITHUB_OUTPUT
+            echo "result_target=comment" >> $GITHUB_OUTPUT
+            echo "is_main_branch=${{ needs.check-comment-trigger.outputs.is_main_branch }}" >> $GITHUB_OUTPUT
+            echo "target_branch=${{ needs.check-comment-trigger.outputs.target_branch }}" >> $GITHUB_OUTPUT
+            echo "target_repo=${{ needs.check-comment-trigger.outputs.target_repo }}" >> $GITHUB_OUTPUT
           fi
 
       - name: Parse Pull Request URL or Main Branch
@@ -445,70 +448,21 @@ jobs:
             echo "final_pr_base_repo=${{ steps.pr_details.outputs.pr_base_repo }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Discover Tooling Repository
-        id: discover-tooling
-        run: |
-          echo "🔍 Discovering tooling repository location..."
-          echo "Repository Owner: ${{ github.repository_owner }}"
-          
-          # Default values
-          TOOLING_REPO="camaraproject/tooling"
-          TOOLING_VERSION="main"
-          
-          # Try fork's tooling first if not camaraproject
-          if [[ "${{ github.repository_owner }}" != "camaraproject" ]]; then
-            FORK_TOOLING="${{ github.repository_owner }}/tooling"
-            echo "🔍 Checking fork tooling: $FORK_TOOLING"
-            
-            # Check if fork's tooling repository exists and has the workflow
-            if gh api repos/$FORK_TOOLING/contents/.github/workflows/api-review-reusable.yml &>/dev/null; then
-              echo "✅ Found fork tooling repository: $FORK_TOOLING"
-              TOOLING_REPO="$FORK_TOOLING"
-            else
-              echo "ℹ️ Fork tooling not found, using official: $TOOLING_REPO"
-            fi
-          else
-            echo "ℹ️ Using official tooling repository: $TOOLING_REPO"
-          fi
-          
-          # Verify the chosen tooling repository exists
-          if ! gh api repos/$TOOLING_REPO/contents/.github/workflows/api-review-reusable.yml &>/dev/null; then
-            echo "❌ ERROR: Reusable workflow not found at $TOOLING_REPO"
-            echo "Expected location: $TOOLING_REPO/.github/workflows/api-review-reusable.yml"
-            echo ""
-            echo "Please ensure:"
-            echo "  1. The tooling repository exists and is accessible"
-            echo "  2. The api-review-reusable.yml workflow file exists"
-            echo "  3. You have read access to the tooling repository"
-            exit 1
-          fi
-          
-          WORKFLOW_LOCATION="$TOOLING_REPO/.github/workflows/api-review-reusable.yml@$TOOLING_VERSION"
-          
-          echo "tooling_repo=$TOOLING_REPO" >> $GITHUB_OUTPUT
-          echo "tooling_version=$TOOLING_VERSION" >> $GITHUB_OUTPUT
-          echo "workflow_location=$WORKFLOW_LOCATION" >> $GITHUB_OUTPUT
-          
-          echo "🎯 Tooling Discovery Results:"
-          echo "  Tooling Repository: $TOOLING_REPO"
-          echo "  Tooling Version: $TOOLING_VERSION"
-          echo "  Full Workflow Reference: $WORKFLOW_LOCATION"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   call-review-workflow:
     needs: validate-input
     if: always() && needs.validate-input.result == 'success'
-    uses: ${{ needs.validate-input.outputs.workflow_location }}
+    # 🔧 CONFIGURATION: Repo owners can modify this line to use their own tooling repository
+    # Example: myuser/tooling/.github/workflows/api-review-reusable.yml@main
+    uses: camaraproject/tooling/.github/workflows/api-review-reusable.yml@main
     with:
       repo_owner: ${{ needs.validate-input.outputs.repo_owner }}
       repo_name: ${{ needs.validate-input.outputs.repo_name }}
       pr_number: ${{ needs.validate-input.outputs.pr_number }}
-      pr_head_sha: ${{ needs.validate-input.outputs.pr_head_sha }}
-      pr_head_ref: ${{ needs.validate-input.outputs.pr_head_ref }}
-      pr_head_repo: ${{ needs.validate-input.outputs.pr_head_repo }}
-      pr_base_ref: ${{ needs.validate-input.outputs.pr_base_ref }}
-      pr_base_repo: ${{ needs.validate-input.outputs.pr_base_repo }}
+      pr_head_sha: ${{ needs.validate-input.outputs.final_pr_head_sha }}
+      pr_head_ref: ${{ needs.validate-input.outputs.final_pr_head_ref }}
+      pr_head_repo: ${{ needs.validate-input.outputs.final_pr_head_repo }}
+      pr_base_ref: ${{ needs.validate-input.outputs.final_pr_base_ref }}
+      pr_base_repo: ${{ needs.validate-input.outputs.final_pr_base_repo }}
       review_type: ${{ needs.validate-input.outputs.review_type }}
       commonalities_version: ${{ needs.validate-input.outputs.commonalities_version }}
       issue_number: ${{ needs.validate-input.outputs.issue_number }}
@@ -554,7 +508,6 @@ jobs:
           **Repository**: ${{ github.repository }}
           **Review Type**: ${{ needs.validate-input.outputs.review_type }}
           **Commonalities Version**: ${{ needs.validate-input.outputs.commonalities_version }}
-          **Tooling Used**: ${{ env.TOOLING_REPOSITORY }}
           **Workflow Run**: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
           
           ### Review Summary
@@ -644,7 +597,6 @@ jobs:
           **Repository**: ${{ github.repository }}
           **Review Type**: ${{ needs.validate-input.outputs.review_type }}
           **Commonalities Version**: ${{ needs.validate-input.outputs.commonalities_version }}
-          **Tooling Used**: ${{ env.TOOLING_REPOSITORY }}
           **Workflow Run**: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
           
           **Error Details:**
