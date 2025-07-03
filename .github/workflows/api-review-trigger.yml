@@ -72,12 +72,34 @@ jobs:
             exit 0
           fi
           
-          COMMENT_BODY="${{ github.event.comment.body }}"
+          # Use jq to safely extract comment body and get first line only
+          COMMENT_FIRST_LINE=$(echo '${{ toJSON(github.event.comment.body) }}' | jq -r '. | split("\n")[0]')
           
-          echo "Comment body: $COMMENT_BODY"
+          echo "Comment first line: '$COMMENT_FIRST_LINE'"
           
           # Check if comment starts with /rc-api-review
-          if [[ "$COMMENT_BODY" == "/rc-api-review"* ]]; then
+          if [[ "$COMMENT_FIRST_LINE" == "/rc-api-review"* ]]; then
+            echo "✅ Valid trigger comment found"
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️ Comment does not start with '/rc-api-review', skipping"
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi      - name: Check Comment Trigger
+        id: check
+        run: |
+          if [[ "${{ github.event_name }}" != "issue_comment" ]]; then
+            echo "ℹ️ Not an issue comment event, skipping comment processing"
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Use jq to safely extract comment body and get first line only
+          COMMENT_FIRST_LINE=$(echo '${{ toJSON(github.event.comment.body) }}' | jq -r '. | split("\n")[0]')
+          
+          echo "Comment first line: '$COMMENT_FIRST_LINE'"
+          
+          # Check if comment starts with /rc-api-review
+          if [[ "$COMMENT_FIRST_LINE" == "/rc-api-review"* ]]; then
             echo "✅ Valid trigger comment found"
             echo "should_run=true" >> $GITHUB_OUTPUT
           else
