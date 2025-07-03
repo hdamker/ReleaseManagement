@@ -1357,66 +1357,83 @@ class CAMARAAPIValidator:
         
         return operation_ids
 
-    def _validate_test_file(self, test_file: str, api_name: str, api_version: str, 
-                           api_title: str, api_operations: List[str], result: TestAlignmentResult):
-        """Validate individual test file"""
-        try:
-            with open(test_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except Exception as e:
+def _validate_test_file(self, test_file: str, api_name: str, api_version: str, 
+                       api_title: str, api_operations: List[str], result: TestAlignmentResult):
+    """Validate individual test file"""
+    try:
+        with open(test_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception as e:
+        result.issues.append(ValidationIssue(
+            Severity.CRITICAL, "Test File Loading",
+            f"Failed to load test file: {str(e)}",
+            test_file
+        ))
+        return
+    
+    lines = content.split('\n')
+    
+    # Check for version in Feature line (can be line 1 or 2)
+    feature_line = None
+    feature_line_number = None
+    
+    # Check first two lines for Feature line
+    for i, line in enumerate(lines[:2]):
+        stripped_line = line.strip()
+        if stripped_line.startswith('Feature:'):
+            feature_line = stripped_line
+            feature_line_number = i + 1
+            break
+    
+    if feature_line:
+        if not self._validate_test_version_line(feature_line, api_version, api_title):
             result.issues.append(ValidationIssue(
-                Severity.CRITICAL, "Test File Loading",
-                f"Failed to load test file: {str(e)}",
-                test_file
+                Severity.MEDIUM, "Test Version",
+                f"Feature line doesn't mention API version {api_version}",
+                f"{test_file}:line {feature_line_number}",
+                f"Include version {api_version} in Feature line: {feature_line}"
             ))
-            return
-        
-        lines = content.split('\n')
-        
-        # Check first line for version
-        if lines:
-            first_line = lines[0].strip()
-            if not self._validate_test_version_line(first_line, api_version, api_title):
-                result.issues.append(ValidationIssue(
-                    Severity.MEDIUM, "Test Version",
-                    f"First line doesn't mention API version {api_version}",
-                    f"{test_file}:1",
-                    f"Include version {api_version} in: {first_line}"
-                ))
-        
-        # Check operation IDs referenced in test
-        test_operations = self._extract_test_operations(content)
-        
-        # Validate that test operations exist in API
-        for test_op in test_operations:
-            if test_op not in api_operations:
-                result.issues.append(ValidationIssue(
-                    Severity.CRITICAL, "Test Operation IDs",
-                    f"Test references unknown operation '{test_op}'",
-                    test_file,
-                    f"Use valid operation ID from: {', '.join(api_operations)}"
-                ))
-        
-        # For operation-specific test files, validate naming
-        test_filename = Path(test_file).stem
-        if test_filename.startswith(f"{api_name}-"):
-            expected_operation = test_filename.replace(f"{api_name}-", "")
-            if expected_operation not in api_operations:
-                result.issues.append(ValidationIssue(
-                    Severity.MEDIUM, "Test File Naming",
-                    f"Test file suggests operation '{expected_operation}' but it doesn't exist in API",
-                    test_file,
-                    f"Use valid operation from: {', '.join(api_operations)}"
-                ))
+    else:
+        result.issues.append(ValidationIssue(
+            Severity.MEDIUM, "Test Structure",
+            "No Feature line found in first two lines",
+            f"{test_file}:lines 1-2",
+            "Add Feature line with API name and version"
+        ))
+    
+    # Check operation IDs referenced in test
+    test_operations = self._extract_test_operations(content)
+    
+    # Validate that test operations exist in API
+    for test_op in test_operations:
+        if test_op not in api_operations:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Test Operation IDs",
+                f"Test references unknown operation '{test_op}'",
+                test_file,
+                f"Use valid operation ID from: {', '.join(api_operations)}"
+            ))
+    
+    # For operation-specific test files, validate naming
+    test_filename = Path(test_file).stem
+    if test_filename.startswith(f"{api_name}-"):
+        expected_operation = test_filename.replace(f"{api_name}-", "")
+        if expected_operation not in api_operations:
+            result.issues.append(ValidationIssue(
+                Severity.MEDIUM, "Test File Naming",
+                f"Test file suggests operation '{expected_operation}' but it doesn't exist in API",
+                test_file,
+                f"Use valid operation from: {', '.join(api_operations)}"
+            ))
 
-    def _validate_test_version_line(self, first_line: str, api_version: str, api_title: str) -> bool:
-        """Check if first line contains the API version"""
-        # Look for version pattern in first line
-        version_pattern = r'v?\d+\.\d+\.\d+(?:-rc\.\d+|-alpha\.\d+)?'
-        found_versions = re.findall(version_pattern, first_line)
-        
-        # Check for both exact version and version with 'v' prefix
-        return api_version in found_versions or f'v{api_version}' in found_versions
+def _validate_test_version_line(self, feature_line: str, api_version: str, api_title: str) -> bool:
+    """Check if Feature line contains the API version"""
+    # Look for version pattern in Feature line
+    version_pattern = r'v?\d+\.\d+\.\d+(?:-rc\.\d+|-alpha\.\d+)?'
+    found_versions = re.findall(version_pattern, feature_line)
+    
+    # Check for both exact version and version with 'v' prefix
+    return api_version in found_versions or f'v{api_version}' in found_versions
 
     def _extract_test_operations(self, content: str) -> List[str]:
         """Extract operation IDs referenced in test content"""
