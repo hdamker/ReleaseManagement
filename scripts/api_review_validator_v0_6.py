@@ -1409,10 +1409,11 @@ class CAMARAAPIValidator:
     def _validate_test_version_line(self, first_line: str, api_version: str, api_title: str) -> bool:
         """Check if first line contains the API version"""
         # Look for version pattern in first line
-        version_pattern = r'v?\d+\.\d+\.\d+(?:-rc\.\d+)?'
+        version_pattern = r'v?\d+\.\d+\.\d+(?:-rc\.\d+|-alpha\.\d+)?'
         found_versions = re.findall(version_pattern, first_line)
         
-        return api_version in found_versions
+        # Check for both exact version and version with 'v' prefix
+        return api_version in found_versions or f'v{api_version}' in found_versions
 
     def _extract_test_operations(self, content: str) -> List[str]:
         """Extract operation IDs referenced in test content"""
