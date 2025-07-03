@@ -293,6 +293,7 @@ jobs:
       tooling_repo: ${{ steps.discover-tooling.outputs.tooling_repo }}
       tooling_version: ${{ steps.discover-tooling.outputs.tooling_version }}
       workflow_location: ${{ steps.discover-tooling.outputs.workflow_location }}
+      tooling_version: ${{ steps.discover-tooling.outputs.tooling_version }}
       final_pr_head_sha: ${{ steps.final-outputs.outputs.final_pr_head_sha }}
       final_pr_head_ref: ${{ steps.final-outputs.outputs.final_pr_head_ref }}
       final_pr_head_repo: ${{ steps.final-outputs.outputs.final_pr_head_repo }}
@@ -479,7 +480,7 @@ jobs:
             exit 1
           fi
           
-          WORKFLOW_LOCATION="$TOOLING_REPO/.github/workflows/api-review-reusable.yml@$TOOLING_VERSION"
+          WORKFLOW_LOCATION="$TOOLING_REPO/.github/workflows/api-review-reusable.yml"
           
           echo "tooling_repo=$TOOLING_REPO" >> $GITHUB_OUTPUT
           echo "tooling_version=$TOOLING_VERSION" >> $GITHUB_OUTPUT
@@ -488,14 +489,15 @@ jobs:
           echo "🎯 Tooling Discovery Results:"
           echo "  Tooling Repository: $TOOLING_REPO"
           echo "  Tooling Version: $TOOLING_VERSION"
-          echo "  Workflow Location: $WORKFLOW_LOCATION"
+          echo "  Workflow Path: $WORKFLOW_LOCATION"
+          echo "  Full Reference: $WORKFLOW_LOCATION@$TOOLING_VERSION"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   call-review-workflow:
     needs: validate-input
     if: always() && needs.validate-input.result == 'success'
-    uses: ${{ needs.validate-input.outputs.workflow_location }}
+    uses: ${{ needs.validate-input.outputs.workflow_location }}@${{ needs.validate-input.outputs.tooling_version }}
     with:
       repo_owner: ${{ needs.validate-input.outputs.repo_owner }}
       repo_name: ${{ needs.validate-input.outputs.repo_name }}
