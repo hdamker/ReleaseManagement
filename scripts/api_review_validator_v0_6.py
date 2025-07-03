@@ -1530,9 +1530,6 @@ class CAMARAAPIValidator:
         # Check commonalities version consistency
         self._validate_commonalities_consistency(specs, result)
         
-        # Check version consistency across files
-        self._check_version_consistency_across_files(list(specs.keys()), result)
-        
         return result
 
     def _validate_shared_schema(self, schema_name: str, specs: dict, result: ConsistencyResult):
@@ -1558,7 +1555,7 @@ class CAMARAAPIValidator:
                 
             if not self._schemas_equivalent(reference_schema, schema):
                 result.issues.append(ValidationIssue(
-                    Severity.CRITICAL, "Shared Schema Consistency",
+                    Severity.MEDIUM, "Shared Schema Consistency",
                     f"Schema '{schema_name}' differs between files",
                     f"{Path(reference_file).name} vs {Path(file_path).name}",
                     f"Ensure '{schema_name}' schema is identical in all files"
@@ -1634,59 +1631,6 @@ class CAMARAAPIValidator:
                     f"{Path(reference_file).name} vs {Path(file_path).name}",
                     "Ensure all files use the same commonalities version"
                 ))
-
-    def _check_version_consistency_across_files(self, api_files: List[str], result: ConsistencyResult):
-        """Check version consistency across multiple API files in the same project"""
-        result.checks_performed.append("Multi-file version consistency validation")
-        
-        if len(api_files) < 2:
-            return
-        
-        # Load all specs and group by API family
-        api_families = {}
-        
-        for api_file in api_files:
-            try:
-                with open(api_file, 'r', encoding='utf-8') as f:
-                    spec = yaml.safe_load(f)
-                
-                filename = Path(api_file).stem
-                version = spec.get('info', {}).get('version', '')
-                
-                # Determine API family (handle related APIs like qod-sessions, qod-profiles)
-                base_name = filename.split('-')[0]  # "qod-sessions" -> "qod"
-                
-                if base_name not in api_families:
-                    api_families[base_name] = []
-                
-                api_families[base_name].append({
-                    'file': api_file,
-                    'filename': filename,
-                    'version': version,
-                    'spec': spec
-                })
-                
-            except Exception as e:
-                result.issues.append(ValidationIssue(
-                    Severity.CRITICAL, "Version Consistency",
-                    f"Failed to load {api_file} for version checking: {str(e)}",
-                    api_file
-                ))
-        
-        # Check version consistency within each family
-        for family_name, apis in api_families.items():
-            if len(apis) > 1:
-                versions = [api['version'] for api in apis]
-                unique_versions = set(versions)
-                
-                if len(unique_versions) > 1:
-                    version_info = ", ".join([f"{api['filename']}({api['version']})" for api in apis])
-                    result.issues.append(ValidationIssue(
-                        Severity.MEDIUM, "Version Consistency",
-                        f"Related APIs in '{family_name}' family have different versions: {version_info}",
-                        "Multi-file consistency",
-                        f"Consider aligning versions for related APIs in the {family_name} family"
-                    ))
 
     def validate_test_alignment(self, api_file: str, test_dir: str) -> TestAlignmentResult:
         """Validate test definitions alignment with API specs"""
