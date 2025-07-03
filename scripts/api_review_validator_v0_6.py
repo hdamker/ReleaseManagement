@@ -840,10 +840,13 @@ class CAMARAAPIValidator:
         else:
             description = external_docs.get('description', '')
             if 'Product documentation at CAMARA' not in description:
+                # Truncate description for display
+                truncated_desc = description[:60] + "..." if len(description) > 60 else description
                 result.issues.append(ValidationIssue(
                     Severity.MEDIUM, "ExternalDocs",
-                    "Should use standard description: 'Product documentation at CAMARA'",
-                    "externalDocs.description"
+                    f"Should use standard description: 'Product documentation at CAMARA'. Found: '{truncated_desc}'",
+                    "externalDocs.description",
+                    "Change description to: 'Product documentation at CAMARA'"
                 ))
             
             url = external_docs.get('url', '')
