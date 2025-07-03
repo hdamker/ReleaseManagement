@@ -453,7 +453,7 @@ jobs:
     if: always() && needs.validate-input.result == 'success'
     # 🔧 CONFIGURATION: Repo owners can modify this line to use their own tooling repository
     # Example: myuser/tooling/.github/workflows/api-review-reusable.yml@main
-    uses: camaraproject/tooling/.github/workflows/api-review-reusable.yml@main
+    uses: hdamker/tooling/.github/workflows/api-review-reusable.yml@main
     with:
       repo_owner: ${{ needs.validate-input.outputs.repo_owner }}
       repo_name: ${{ needs.validate-input.outputs.repo_name }}
