@@ -419,6 +419,20 @@ jobs:
           PR_NUMBER="${{ needs.validate-input.outputs.pr_number }}"
           COMMONALITIES_VERSION="${{ needs.validate-input.outputs.commonalities_version }}"
           
+          # Validate and sanitize inputs
+          if ! [[ "$ISSUE_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "❌ Invalid issue number: $ISSUE_NUMBER"
+            exit 1
+          fi
+          
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "❌ Invalid PR number: $PR_NUMBER"
+            exit 1
+          fi
+          
+          # Sanitize repo name (alphanumeric, hyphens, underscores only)
+          REPO_NAME_CLEAN=$(echo "$REPO_NAME" | sed 's/[^a-zA-Z0-9_-]//g')
+          
           echo "📋 Preparing to post summary to issue #${ISSUE_NUMBER}..."
           
           # Create URLs
@@ -427,12 +441,14 @@ jobs:
           
           # Construct expected report filename pattern
           TIMESTAMP_PATTERN=$(date '+%Y%m%d_*')
-          EXPECTED_REPORT="camara-api-review_${REPO_NAME}_pr${PR_NUMBER}_${TIMESTAMP_PATTERN}.md"
+          EXPECTED_REPORT="camara-api-review_${REPO_NAME_CLEAN}_pr${PR_NUMBER}_${TIMESTAMP_PATTERN}.md"
           
           # Create comment body with trigger source indicator
           TRIGGER_INFO=""
           if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
-            TRIGGER_INFO="**Triggered by**: Comment \`/rc-api-review\` by @${{ github.event.comment.user.login }}"
+            # Sanitize username to prevent injection
+            USERNAME=$(echo "${{ github.event.comment.user.login }}" | sed 's/[^a-zA-Z0-9_-]//g')
+            TRIGGER_INFO="**Triggered by**: Comment \`/rc-api-review\` by @${USERNAME}"
           else
             TRIGGER_INFO="**Triggered by**: Manual workflow dispatch"
           fi
@@ -449,8 +465,36 @@ jobs:
           
           EOF
           
-          # Append the summary content from the file
-          cat summary_content.md >> comment_body.md
+          # Validate summary content exists and is safe
+          if [[ -f "summary_content.md" ]] && [[ -s "summary_content.md" ]]; then
+            # Check for potential GitHub Actions injection
+            if grep -q "::\|%0A\|%0D" "summary_content.md"; then
+              echo "⚠️ Summary contains potentially dangerous content, sanitizing..."
+              sed 's/::\([a-zA-Z-]*\)::/&#58;&#58;\1&#58;&#58;/g; s/%0A/\\n/g; s/%0D/\\r/g' "summary_content.md" > summary_sanitized.md
+              mv summary_sanitized.md summary_content.md
+            fi
+            
+            # Limit content size (GitHub API limit is ~65KB for comments)
+            MAX_SIZE=60000
+            FILE_SIZE=$(wc -c < summary_content.md)
+            if [[ "$FILE_SIZE" -gt "$MAX_SIZE" ]]; then
+              echo "⚠️ Summary too large, truncating..."
+              head -c $MAX_SIZE summary_content.md > summary_truncated.md
+              echo "" >> summary_truncated.md
+              echo "⚠️ *Summary truncated due to size limits. See detailed report for complete analysis.*" >> summary_truncated.md
+              mv summary_truncated.md summary_content.md
+            fi
+            
+            # Append the summary content from the file
+            cat summary_content.md >> comment_body.md
+          else
+            echo "❌ No valid summary content, creating fallback..."
+            cat >> comment_body.md << 'FALLBACK_EOF'
+          ❌ **API Review Failed**
+          
+          The automated review could not be completed. Please check the workflow logs for details.
+          FALLBACK_EOF
+          fi
           
           # Add simplified download section
           cat >> comment_body.md << EOF
@@ -464,61 +508,49 @@ jobs:
           
           EOF
           
-          # Add version-specific information if there were version issues
-          if [[ "${{ needs.call-review-workflow.outputs.review_status }}" == "error" ]]; then
-            cat >> comment_body.md << EOF
-          ---
+          # Validate final comment size
+          COMMENT_SIZE=$(wc -c < comment_body.md)
+          if [[ "$COMMENT_SIZE" -gt 65000 ]]; then
+            echo "⚠️ Final comment too large, creating minimal version..."
+            cat > comment_body.md << 'MINIMAL_EOF'
+          ## 🤖 API Review Results
           
-          **📋 Supported Versions:**
-          - ✅ **Commonalities 0.6**: Fully supported with \`api_review_validator_v0_6.py\`
-          - 📅 **Commonalities 0.7+**: Support planned for future releases
-          
-          **🔧 How to fix:**
-          - For current reviews: Use \`commonalities_version: 0.6\`
-          - For future versions: Wait for validator script updates
-          EOF
+          Review completed but summary too large for comment.
+          **Workflow Run**: [View Details](${WORKFLOW_URL})
+          **Artifacts**: [Download Reports](${ARTIFACTS_URL})
+          MINIMAL_EOF
           fi
           
           # Debug: Show what we're about to post
           echo "📋 Final comment content:"
           echo "Lines: $(wc -l < comment_body.md)"
           echo "Characters: $(wc -c < comment_body.md)"
-          echo ""
-          echo "🔗 Key URLs:"
-          echo "  Artifacts: ${ARTIFACTS_URL}"
-          echo "  Expected Report: ${EXPECTED_REPORT}"
           
           # Post comment to issue using the properly formatted body
           if command -v jq > /dev/null; then
             COMMENT_JSON=$(jq -n --rawfile body comment_body.md '{body: $body}')
             
-            curl -X POST \
+            HTTP_STATUS=$(curl -w "%{http_code}" -o curl_response.txt -X POST \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "${{ github.api_url }}/repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
-              -d "$COMMENT_JSON"
+              -d "$COMMENT_JSON")
+            
+            if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
+              echo "✅ Summary posted to issue #${ISSUE_NUMBER}"
+            else
+              echo "❌ Failed to post comment. HTTP status: $HTTP_STATUS"
+              echo "Response:" 
+              cat curl_response.txt
+              exit 1
+            fi
           else
-            echo "❌ jq not available, using alternative method"
-            # Fallback method without jq
-            COMMENT_BODY=$(cat comment_body.md | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
-            curl -X POST \
-              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "${{ github.api_url }}/repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
-              -d "{\"body\":\"$COMMENT_BODY\"}"
+            echo "❌ jq not available for safe comment posting"
+            exit 1
           fi
           
-          echo "✅ Summary posted to issue #${ISSUE_NUMBER} with direct download links"
-          
-          # Log additional debug information
-          echo "📋 Debug Summary:"
-          echo "  Repository: ${REPO_NAME}"
-          echo "  PR Number: ${PR_NUMBER}"
-          echo "  Commonalities Version: ${COMMONALITIES_VERSION}"
-          echo "  Review Status: ${{ needs.call-review-workflow.outputs.review_status }}"
-          echo "  Critical Issues: ${{ needs.call-review-workflow.outputs.critical_issues_count }}"
-          echo "  Artifacts Link: ${ARTIFACTS_URL}"
-          echo "  Comment Length: $(wc -c < comment_body.md) characters"
+          # Clean up sensitive files
+          rm -f comment_body.md curl_response.txt summary_content.md
 
       - name: Handle Workflow Failure
         if: needs.call-review-workflow.result == 'failure'
