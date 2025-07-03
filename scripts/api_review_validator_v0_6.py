@@ -13,6 +13,7 @@ Enhanced features:
 - Improved scope validation
 - Test alignment validation
 - Multi-file consistency checking
+- FIXED: Proper backtick wrapping for markdown rendering
 """
 
 import os
@@ -319,9 +320,9 @@ class CAMARAAPIValidator:
         if not has_subscriptions_path:
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Explicit Subscriptions",
-                "Explicit subscription API must have /subscriptions endpoint",
+                "Explicit subscription API must have `/subscriptions` endpoint",
                 "paths",
-                "Add /subscriptions endpoint for subscription management"
+                "Add `/subscriptions` endpoint for subscription management"
             ))
         
         # Apply all subscription-specific checks
@@ -356,7 +357,7 @@ class CAMARAAPIValidator:
         if not has_callbacks and 'CloudEvent' in schemas:
             result.issues.append(ValidationIssue(
                 Severity.MEDIUM, "Implicit Subscriptions",
-                "API has CloudEvent schemas but no callback operations defined",
+                "API has `CloudEvent` schemas but no callback operations defined",
                 "paths",
                 "Add callback operations for notification delivery"
             ))
@@ -370,9 +371,9 @@ class CAMARAAPIValidator:
             if path.endswith('/subscriptions') or '/subscriptions/' in path:
                 result.issues.append(ValidationIssue(
                     Severity.MEDIUM, "Implicit Subscriptions",
-                    "Implicit subscription API should not have /subscriptions endpoint",
+                    "Implicit subscription API should not have `/subscriptions` endpoint",
                     f"paths.{path}",
-                    "Remove /subscriptions endpoint or reclassify as explicit subscription API"
+                    "Remove `/subscriptions` endpoint or reclassify as explicit subscription API"
                 ))
 
     def _check_sink_credential_compliance(self, spec: dict, result: ValidationResult):
@@ -388,7 +389,7 @@ class CAMARAAPIValidator:
             if not discriminator:
                 result.issues.append(ValidationIssue(
                     Severity.MEDIUM, "Sink Credentials",
-                    "SinkCredential schema should use discriminator pattern",
+                    "`SinkCredential` schema should use discriminator pattern",
                     "components.schemas.SinkCredential.discriminator"
                 ))
             
@@ -396,7 +397,7 @@ class CAMARAAPIValidator:
             if 'AccessTokenCredential' not in schemas:
                 result.issues.append(ValidationIssue(
                     Severity.MEDIUM, "Sink Credentials", 
-                    "Missing AccessTokenCredential schema for sink authentication",
+                    "Missing `AccessTokenCredential` schema for sink authentication",
                     "components.schemas.AccessTokenCredential"
                 ))
 
@@ -420,7 +421,7 @@ class CAMARAAPIValidator:
                 if field not in required_fields:
                     result.issues.append(ValidationIssue(
                         Severity.CRITICAL, "CloudEvents",
-                        f"CloudEvent missing required field: {field}",
+                        f"CloudEvent missing required field: `{field}`",
                         "components.schemas.CloudEvent.required"
                     ))
             
@@ -432,7 +433,7 @@ class CAMARAAPIValidator:
             if '1.0' not in enum_values:
                 result.issues.append(ValidationIssue(
                     Severity.CRITICAL, "CloudEvents",
-                    "CloudEvent specversion must include '1.0'",
+                    "CloudEvent `specversion` must include `1.0`",
                     "components.schemas.CloudEvent.properties.specversion.enum"
                 ))
             
@@ -443,7 +444,7 @@ class CAMARAAPIValidator:
             if 'application/json' not in enum_values:
                 result.issues.append(ValidationIssue(
                     Severity.CRITICAL, "CloudEvents",
-                    "CloudEvent datacontenttype must include 'application/json'",
+                    "CloudEvent `datacontenttype` must include `application/json`",
                     "components.schemas.CloudEvent.properties.datacontenttype.enum"
                 ))
 
@@ -462,9 +463,9 @@ class CAMARAAPIValidator:
                     if not re.match(r'^org\.camaraproject\.[a-z0-9-]+\.v\d+\.[a-z0-9-]+$', event_type):
                         result.issues.append(ValidationIssue(
                             Severity.MEDIUM, "Event Type Naming",
-                            f"Event type doesn't follow CAMARA pattern: {event_type}",
+                            f"Event type doesn't follow CAMARA pattern: `{event_type}`",
                             f"components.schemas.{schema_name}.enum",
-                            "Use pattern: org.camaraproject.<api-name>.v<version>.<event-name>"
+                            "Use pattern: `org.camaraproject.<api-name>.v<version>.<event-name>`"
                         ))
 
     def _check_subscription_lifecycle_events(self, spec: dict, result: ValidationResult):
@@ -506,7 +507,7 @@ class CAMARAAPIValidator:
                     if reason not in enum_values:
                         result.issues.append(ValidationIssue(
                             Severity.MEDIUM, "Subscription Events",
-                            f"Missing termination reason: {reason}",
+                            f"Missing termination reason: `{reason}`",
                             "components.schemas.TerminationReason.enum"
                         ))
 
@@ -537,9 +538,9 @@ class CAMARAAPIValidator:
         if not found_invalid_sink:
             result.issues.append(ValidationIssue(
                 Severity.MEDIUM, "Sink Validation",
-                "Missing INVALID_SINK error response",
+                "Missing `INVALID_SINK` error response",
                 "components.responses",
-                "Add 400 INVALID_SINK error response for sink validation"
+                "Add `400 INVALID_SINK` error response for sink validation"
             ))
 
     def _check_subscription_error_codes(self, spec: dict, result: ValidationResult):
@@ -576,9 +577,9 @@ class CAMARAAPIValidator:
             if error not in found_errors:
                 result.issues.append(ValidationIssue(
                     Severity.LOW, "Error Responses",
-                    f"Missing device error code: {error}",
+                    f"Missing device error code: `{error}`",
                     "components.responses",
-                    f"Add 422 {error} error response for device validation"
+                    f"Add `422 {error}` error response for device validation"
                 ))
 
     # ===========================================
@@ -627,8 +628,8 @@ class CAMARAAPIValidator:
                 if not re.match(pattern, scope):
                     result.issues.append(ValidationIssue(
                         Severity.MEDIUM, "Scope Naming",
-                        f"Event-specific scope doesn't follow pattern: {scope}",
-                        f"Expected: {api_name}:org.camaraproject.<api-name>.v<version>.<event-name>:<action>",
+                        f"Event-specific scope doesn't follow pattern: `{scope}`",
+                        f"Expected: `{api_name}:org.camaraproject.<api-name>.v<version>.<event-name>:<action>`",
                         "Use correct event-specific scope pattern"
                     ))
             elif ':' in scope:
@@ -637,14 +638,14 @@ class CAMARAAPIValidator:
                 if len(parts) != 2:
                     result.issues.append(ValidationIssue(
                         Severity.MEDIUM, "Scope Naming",
-                        f"Explicit subscription scope should have 2 parts: {scope}",
-                        f"Expected: {api_name}:<action>"
+                        f"Explicit subscription scope should have 2 parts: `{scope}`",
+                        f"Expected: `{api_name}:<action>`"
                     ))
                 elif parts[0] != api_name:
                     result.issues.append(ValidationIssue(
                         Severity.MEDIUM, "Scope Naming",
-                        f"Scope API name mismatch: expected '{api_name}', got '{parts[0]}'",
-                        f"Use: {api_name}:{parts[1]}"
+                        f"Scope API name mismatch: expected `{api_name}`, got `{parts[0]}`",
+                        f"Use: `{api_name}:{parts[1]}`"
                     ))
         else:
             # For regular and implicit subscription APIs: {api-name}:{resource}:{action} or {api-name}:{action}
@@ -654,22 +655,22 @@ class CAMARAAPIValidator:
                 if parts[0] != api_name:
                     result.issues.append(ValidationIssue(
                         Severity.MEDIUM, "Scope Naming",
-                        f"Scope API name mismatch: expected '{api_name}', got '{parts[0]}'",
-                        f"Use: {api_name}:{parts[1]}"
+                        f"Scope API name mismatch: expected `{api_name}`, got `{parts[0]}`",
+                        f"Use: `{api_name}:{parts[1]}`"
                     ))
             elif len(parts) == 3:
                 # Resource-based scope: api-name:resource:action  
                 if parts[0] != api_name:
                     result.issues.append(ValidationIssue(
                         Severity.MEDIUM, "Scope Naming",
-                        f"Scope API name mismatch: expected '{api_name}', got '{parts[0]}'",
-                        f"Use: {api_name}:{parts[1]}:{parts[2]}"
+                        f"Scope API name mismatch: expected `{api_name}`, got `{parts[0]}`",
+                        f"Use: `{api_name}:{parts[1]}:{parts[2]}`"
                     ))
             else:
                 result.issues.append(ValidationIssue(
                     Severity.MEDIUM, "Scope Naming",
-                    f"Scope doesn't follow CAMARA pattern: {scope}",
-                    f"Expected: {api_name}:<action> or {api_name}:<resource>:<action>"
+                    f"Scope doesn't follow CAMARA pattern: `{scope}`",
+                    f"Expected: `{api_name}:<action>` or `{api_name}:<resource>:<action>`"
                 ))
 
     def _check_enhanced_filename_consistency(self, file_path: str, spec: dict, result: ValidationResult):
@@ -709,9 +710,9 @@ class CAMARAAPIValidator:
         if not url_api_name:
             result.issues.append(ValidationIssue(
                 Severity.MEDIUM, "Filename Consistency",
-                f"Cannot extract api-name from server URL: {server_url}",
+                f"Cannot extract api-name from server URL: `{server_url}`",
                 "servers[0].url",
-                "Use format: {{apiRoot}}/api-name/version"
+                "Use format: `{apiRoot}/api-name/version`"
             ))
             return
         
@@ -719,9 +720,9 @@ class CAMARAAPIValidator:
         if filename != url_api_name:
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Filename Consistency",
-                f"Filename '{filename}' doesn't match server URL api-name '{url_api_name}'",
+                f"Filename `{filename}` doesn't match server URL api-name `{url_api_name}`",
                 file_path,
-                f"Rename file to '{url_api_name}.yaml' or update server URL to match filename"
+                f"Rename file to `{url_api_name}.yaml` or update server URL to match filename"
             ))
         
         # Enhanced title consistency check
@@ -745,7 +746,7 @@ class CAMARAAPIValidator:
                 if overlap < 0.5:  # Less than 50% word overlap
                     result.issues.append(ValidationIssue(
                         Severity.MEDIUM, "Filename Consistency", 
-                        f"Title '{title}' doesn't align well with api-name '{url_api_name}'",
+                        f"Title `{title}` doesn't align well with api-name `{url_api_name}`",
                         "info.title",
                         f"Consider using a title that relates to: {', '.join(expected_variations)}"
                     ))
@@ -768,7 +769,7 @@ class CAMARAAPIValidator:
         if missing_responses:
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Error Responses",
-                f"Missing mandatory error responses: {', '.join(missing_responses)}",
+                f"Missing mandatory error responses: `{', '.join(missing_responses)}`",
                 "components.responses",
                 "Add mandatory error response definitions"
             ))
@@ -783,18 +784,18 @@ class CAMARAAPIValidator:
                     if '401' not in op_responses:
                         result.issues.append(ValidationIssue(
                             Severity.CRITICAL, "Error Responses",
-                            f"Operation {method.upper()} {path} missing mandatory 401 response",
+                            f"Operation `{method.upper()} {path}` missing mandatory `401` response",
                             f"paths.{path}.{method}.responses",
-                            "Add 401 response reference"
+                            "Add `401` response reference"
                         ))
                     
                     # Check for 403 response  
                     if '403' not in op_responses:
                         result.issues.append(ValidationIssue(
                             Severity.CRITICAL, "Error Responses", 
-                            f"Operation {method.upper()} {path} missing mandatory 403 response",
+                            f"Operation `{method.upper()} {path}` missing mandatory `403` response",
                             f"paths.{path}.{method}.responses",
-                            "Add 403 response reference"
+                            "Add `403` response reference"
                         ))
 
     def _check_server_url_format(self, spec: dict, result: ValidationResult):
@@ -814,9 +815,9 @@ class CAMARAAPIValidator:
             if 'vwip' not in url:
                 result.issues.append(ValidationIssue(
                     Severity.CRITICAL, "Server URL",
-                    "WIP version must use 'vwip' in server URL",
+                    "WIP version must use `vwip` in server URL",
                     "servers[0].url",
-                    "Use format: {apiRoot}/api-name/vwip"
+                    "Use format: `{apiRoot}/api-name/vwip`"
                 ))
             return
         
@@ -825,7 +826,7 @@ class CAMARAAPIValidator:
         if not version_match:
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Server URL",
-                f"Invalid version format for URL validation: {version}",
+                f"Invalid version format for URL validation: `{version}`",
                 "info.version"
             ))
             return
@@ -847,9 +848,9 @@ class CAMARAAPIValidator:
         if expected_pattern not in url:
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Server URL",
-                f"Server URL doesn't match version pattern. Expected: {expected_pattern}, found in: {url}",
+                f"Server URL doesn't match version pattern. Expected: `{expected_pattern}`, found in: `{url}`",
                 "servers[0].url",
-                f"Update server URL to include {expected_pattern}"
+                f"Update server URL to include `{expected_pattern}`"
             ))
 
     def _check_commonalities_schema_compliance(self, spec: dict, result: ValidationResult):
@@ -885,7 +886,7 @@ class CAMARAAPIValidator:
                 if schema.get('type') != requirements.get('type'):
                     result.issues.append(ValidationIssue(
                         Severity.CRITICAL, "Common Schemas",
-                        f"{schema_name} schema has wrong type: expected {requirements.get('type')}",
+                        f"`{schema_name}` schema has wrong type: expected `{requirements.get('type')}`",
                         f"components.schemas.{schema_name}.type"
                     ))
                 
@@ -896,7 +897,7 @@ class CAMARAAPIValidator:
                     if pattern != expected_pattern:
                         result.issues.append(ValidationIssue(
                             Severity.CRITICAL, "Common Schemas",
-                            f"XCorrelator pattern incorrect. Expected: {expected_pattern}",
+                            f"`XCorrelator` pattern incorrect. Expected: `{expected_pattern}`",
                             f"components.schemas.{schema_name}.pattern"
                         ))
                 
@@ -908,7 +909,7 @@ class CAMARAAPIValidator:
                     if missing_fields:
                         result.issues.append(ValidationIssue(
                             Severity.CRITICAL, "Common Schemas",
-                            f"ErrorInfo missing required fields: {', '.join(missing_fields)}",
+                            f"`ErrorInfo` missing required fields: `{', '.join(missing_fields)}`",
                             f"components.schemas.{schema_name}.required"
                         ))
                 
@@ -919,7 +920,7 @@ class CAMARAAPIValidator:
                     if min_props != expected_min:
                         result.issues.append(ValidationIssue(
                             Severity.MEDIUM, "Common Schemas",
-                            f"Device schema should have minProperties: {expected_min}",
+                            f"`Device` schema should have `minProperties: {expected_min}`",
                             f"components.schemas.{schema_name}.minProperties"
                         ))
 
@@ -972,9 +973,9 @@ class CAMARAAPIValidator:
                 if not path_found:
                     result.issues.append(ValidationIssue(
                         Severity.CRITICAL, "Explicit Subscriptions",
-                        f"Missing required operation: {required_op} ({description})",
+                        f"Missing required operation: `{required_op}` ({description})",
                         "paths",
-                        f"Add {required_op} operation"
+                        f"Add `{required_op}` operation"
                     ))
 
     def _check_cloudevents_schema_compliance(self, spec: dict, result: ValidationResult):
@@ -992,9 +993,9 @@ class CAMARAAPIValidator:
                 if field not in schema_required:
                     result.issues.append(ValidationIssue(
                         Severity.CRITICAL, "CloudEvents",
-                        f"CloudEvent schema missing required field: {field}",
+                        f"CloudEvent schema missing required field: `{field}`",
                         "components.schemas.CloudEvent.required",
-                        f"Add '{field}' to required fields"
+                        f"Add `{field}` to required fields"
                     ))
             
             # Check specversion enum
@@ -1005,7 +1006,7 @@ class CAMARAAPIValidator:
                 if '1.0' not in enum_vals:
                     result.issues.append(ValidationIssue(
                         Severity.CRITICAL, "CloudEvents",
-                        "CloudEvent specversion must include '1.0'",
+                        "CloudEvent `specversion` must include `1.0`",
                         "components.schemas.CloudEvent.properties.specversion.enum"
                     ))
 
@@ -1026,7 +1027,7 @@ class CAMARAAPIValidator:
         pass
 
     # ===========================================
-    # Core Validation Functions (unchanged from original)
+    # Core Validation Functions (enhanced with backticks)
     # ===========================================
 
     def _check_openapi_version(self, spec: dict, result: ValidationResult):
@@ -1037,9 +1038,9 @@ class CAMARAAPIValidator:
         if openapi_version != '3.0.3':
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "OpenAPI Version",
-                f"Must use OpenAPI 3.0.3, found: {openapi_version}",
+                f"Must use OpenAPI 3.0.3, found: `{openapi_version}`",
                 "Root level",
-                "Set 'openapi: 3.0.3'"
+                "Set `openapi: 3.0.3`"
             ))
 
     def _check_info_object(self, spec: dict, result: ValidationResult):
@@ -1053,7 +1054,7 @@ class CAMARAAPIValidator:
         if 'API' in title:
             result.issues.append(ValidationIssue(
                 Severity.MEDIUM, "Info Object",
-                f"Title should not include 'API': {title}",
+                f"Title should not include 'API': `{title}`",
                 "info.title",
                 "Remove 'API' from title"
             ))
@@ -1063,9 +1064,9 @@ class CAMARAAPIValidator:
         if version != 'wip' and not re.match(r'^\d+\.\d+\.\d+(-rc\.\d+|-alpha\.\d+)?$', version):
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Info Object",
-                f"Invalid version format: {version}",
+                f"Invalid version format: `{version}`",
                 "info.version",
-                "Use semantic versioning (x.y.z or x.y.z-rc.n)"
+                "Use semantic versioning (`x.y.z` or `x.y.z-rc.n`)"
             ))
         
         # License check
@@ -1073,7 +1074,7 @@ class CAMARAAPIValidator:
         if license_info.get('name') != 'Apache 2.0':
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Info Object",
-                "License must be 'Apache 2.0'",
+                "License must be `Apache 2.0`",
                 "info.license.name"
             ))
         
@@ -1089,7 +1090,7 @@ class CAMARAAPIValidator:
         if str(commonalities) != self.expected_commonalities_version:
             result.issues.append(ValidationIssue(
                 Severity.MEDIUM, "Info Object",
-                f"Expected commonalities {self.expected_commonalities_version}, found: {commonalities}",
+                f"Expected commonalities `{self.expected_commonalities_version}`, found: `{commonalities}`",
                 "info.x-camara-commonalities"
             ))
         
@@ -1097,17 +1098,17 @@ class CAMARAAPIValidator:
         if 'termsOfService' in info:
             result.issues.append(ValidationIssue(
                 Severity.MEDIUM, "Info Object",
-                "termsOfService field is forbidden",
+                "`termsOfService` field is forbidden",
                 "info.termsOfService",
-                "Remove termsOfService field"
+                "Remove `termsOfService` field"
             ))
         
         if 'contact' in info:
             result.issues.append(ValidationIssue(
                 Severity.MEDIUM, "Info Object",
-                "contact field is forbidden",
+                "`contact` field is forbidden",
                 "info.contact",
-                "Remove contact field"
+                "Remove `contact` field"
             ))
         
         # Check mandatory description templates
@@ -1134,7 +1135,7 @@ class CAMARAAPIValidator:
         if not servers:
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Servers Object",
-                "Missing servers object",
+                "Missing `servers` object",
                 "servers"
             ))
             return
@@ -1149,7 +1150,7 @@ class CAMARAAPIValidator:
         if version == 'wip' and 'vwip' not in url:
             result.issues.append(ValidationIssue(
                 Severity.MEDIUM, "Servers Object",
-                "WIP version should use 'vwip' in URL or be updated to proper version",
+                "WIP version should use `vwip` in URL or be updated to proper version",
                 "servers[0].url"
             ))
         
@@ -1166,7 +1167,7 @@ class CAMARAAPIValidator:
                 if expected_url_pattern not in url:
                     result.issues.append(ValidationIssue(
                         Severity.CRITICAL, "Servers Object",
-                        f"Incorrect URL version format. Expected pattern: {expected_url_pattern}",
+                        f"Incorrect URL version format. Expected pattern: `{expected_url_pattern}`",
                         "servers[0].url"
                     ))
         
@@ -1176,7 +1177,7 @@ class CAMARAAPIValidator:
         if api_root.get('default') != 'http://localhost:9091':
             result.issues.append(ValidationIssue(
                 Severity.MEDIUM, "Servers Object",
-                "apiRoot default should be 'http://localhost:9091'",
+                "`apiRoot` default should be `http://localhost:9091`",
                 "servers[0].variables.apiRoot.default"
             ))
 
@@ -1188,9 +1189,9 @@ class CAMARAAPIValidator:
         if not external_docs:
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "ExternalDocs",
-                "Missing externalDocs object",
+                "Missing `externalDocs` object",
                 "externalDocs",
-                "Add externalDocs with GitHub repository URL"
+                "Add `externalDocs` with GitHub repository URL"
             ))
         else:
             description = external_docs.get('description', '')
@@ -1199,7 +1200,7 @@ class CAMARAAPIValidator:
                 truncated_desc = description[:60] + "..." if len(description) > 60 else description
                 result.issues.append(ValidationIssue(
                     Severity.MEDIUM, "ExternalDocs",
-                    f"Should use standard description: 'Product documentation at CAMARA'. Found: '{truncated_desc}'",
+                    f"Should use standard description: 'Product documentation at CAMARA'. Found: `{truncated_desc}`",
                     "externalDocs.description",
                     "Change description to: 'Product documentation at CAMARA'"
                 ))
@@ -1224,13 +1225,13 @@ class CAMARAAPIValidator:
         if not open_id:
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Security Schemes",
-                "Missing 'openId' security scheme",
+                "Missing `openId` security scheme",
                 "components.securitySchemes.openId"
             ))
         elif open_id.get('type') != 'openIdConnect':
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Security Schemes",
-                "openId scheme must have type 'openIdConnect'",
+                "`openId` scheme must have type `openIdConnect`",
                 "components.securitySchemes.openId.type"
             ))
         
@@ -1245,7 +1246,7 @@ class CAMARAAPIValidator:
                             if scheme_name not in security_schemes:
                                 result.issues.append(ValidationIssue(
                                     Severity.CRITICAL, "Security Schemes",
-                                    f"Undefined security scheme '{scheme_name}' referenced",
+                                    f"Undefined security scheme `{scheme_name}` referenced",
                                     f"paths.{path}.{method}.security"
                                 ))
 
@@ -1276,9 +1277,9 @@ class CAMARAAPIValidator:
                         if forbidden_code in enum_values:
                             result.issues.append(ValidationIssue(
                                 Severity.CRITICAL, "Error Responses",
-                                f"Forbidden error code '{forbidden_code}' found",
+                                f"Forbidden error code `{forbidden_code}` found",
                                 f"components.responses.{response_name}",
-                                f"Remove '{forbidden_code}' from error codes"
+                                f"Remove `{forbidden_code}` from error codes"
                             ))
             
             # Check examples for forbidden codes
@@ -1288,7 +1289,7 @@ class CAMARAAPIValidator:
                 if example_value.get('code') in forbidden_codes:
                     result.issues.append(ValidationIssue(
                         Severity.CRITICAL, "Error Responses",
-                        f"Forbidden error code in example '{example_name}'",
+                        f"Forbidden error code in example `{example_name}`",
                         f"components.responses.{response_name}.examples.{example_name}"
                     ))
 
@@ -1304,7 +1305,7 @@ class CAMARAAPIValidator:
         if not x_correlator:
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "X-Correlator",
-                "Missing XCorrelator schema",
+                "Missing `XCorrelator` schema",
                 "components.schemas.XCorrelator"
             ))
         else:
@@ -1313,7 +1314,7 @@ class CAMARAAPIValidator:
             if pattern != expected_pattern:
                 result.issues.append(ValidationIssue(
                     Severity.CRITICAL, "X-Correlator",
-                    f"Incorrect XCorrelator pattern. Expected: {expected_pattern}",
+                    f"Incorrect `XCorrelator` pattern. Expected: `{expected_pattern}`",
                     "components.schemas.XCorrelator.pattern"
                 ))
 
@@ -1328,7 +1329,7 @@ class CAMARAAPIValidator:
                     if 'RFC 3339' not in description:
                         result.issues.append(ValidationIssue(
                             Severity.MEDIUM, "Date-Time Fields",
-                            "Missing RFC 3339 description for date-time field",
+                            "Missing RFC 3339 description for `date-time` field",
                             path,
                             "Add RFC 3339 format description"
                         ))
@@ -1353,9 +1354,9 @@ class CAMARAAPIValidator:
             if name.lower() in self.reserved_words:
                 result.issues.append(ValidationIssue(
                     Severity.MEDIUM, "Reserved Words",
-                    f"Reserved word '{name}' used",
+                    f"Reserved word `{name}` used",
                     location,
-                    f"Rename '{name}' to avoid conflicts"
+                    f"Rename `{name}` to avoid conflicts"
                 ))
         
         # Check paths
@@ -1402,7 +1403,7 @@ class CAMARAAPIValidator:
             if missing_props:
                 result.issues.append(ValidationIssue(
                     Severity.LOW, "Device Schema",
-                    f"Device schema missing properties: {', '.join(missing_props)}",
+                    f"Device schema missing properties: `{', '.join(missing_props)}`",
                     "components.schemas.Device.properties",
                     "Consider adding missing device identifier properties"
                 ))
@@ -1412,7 +1413,7 @@ class CAMARAAPIValidator:
             if min_props != 1:
                 result.issues.append(ValidationIssue(
                     Severity.MEDIUM, "Device Schema",
-                    "Device schema should have minProperties: 1",
+                    "Device schema should have `minProperties: 1`",
                     "components.schemas.Device.minProperties"
                 ))
 
@@ -1426,7 +1427,7 @@ class CAMARAAPIValidator:
         if not re.match(r'^[a-z0-9-]+$', filename):
             result.issues.append(ValidationIssue(
                 Severity.MEDIUM, "File Naming",
-                f"Filename should use kebab-case: {filename}",
+                f"Filename should use kebab-case: `{filename}`",
                 file_path,
                 "Use lowercase letters, numbers, and hyphens only"
             ))
@@ -1440,9 +1441,9 @@ class CAMARAAPIValidator:
         if version == 'wip':
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Version",
-                "Work-in-progress version 'wip' cannot be released",
+                "Work-in-progress version `wip` cannot be released",
                 "info.version",
-                "Update to proper semantic version (e.g., 0.1.0-rc.1)"
+                "Update to proper semantic version (e.g., `0.1.0-rc.1`)"
             ))
         
         # Check server URL for vwip
@@ -1452,9 +1453,9 @@ class CAMARAAPIValidator:
             if 'vwip' in server_url:
                 result.issues.append(ValidationIssue(
                     Severity.CRITICAL, "Server URL",
-                    "Server URL contains 'vwip' - not valid for release",
+                    "Server URL contains `vwip` - not valid for release",
                     "servers[0].url",
-                    "Update to proper version format (e.g., v0.1rc1)"
+                    "Update to proper version format (e.g., `v0.1rc1`)"
                 ))
 
     def _check_updated_generic401(self, spec: dict, result: ValidationResult):
@@ -1504,7 +1505,7 @@ class CAMARAAPIValidator:
             except Exception as e:
                 result.issues.append(ValidationIssue(
                     Severity.CRITICAL, "File Loading",
-                    f"Failed to load {api_file}: {str(e)}",
+                    f"Failed to load `{api_file}`: {str(e)}",
                     api_file
                 ))
                 continue
@@ -1556,9 +1557,9 @@ class CAMARAAPIValidator:
             if not self._schemas_equivalent(reference_schema, schema):
                 result.issues.append(ValidationIssue(
                     Severity.MEDIUM, "Shared Schema Consistency",
-                    f"Schema '{schema_name}' differs between files",
+                    f"Schema `{schema_name}` differs between files",
                     f"{Path(reference_file).name} vs {Path(file_path).name}",
-                    f"Ensure '{schema_name}' schema is identical in all files"
+                    f"Ensure `{schema_name}` schema is identical in all files"
                 ))
 
     def _schemas_equivalent(self, schema1: dict, schema2: dict) -> bool:
@@ -1627,7 +1628,7 @@ class CAMARAAPIValidator:
             if version != reference_version:
                 result.issues.append(ValidationIssue(
                     Severity.MEDIUM, "Commonalities Consistency",
-                    f"Commonalities version differs: {reference_version} vs {version}",
+                    f"Commonalities version differs: `{reference_version}` vs `{version}`",
                     f"{Path(reference_file).name} vs {Path(file_path).name}",
                     "Ensure all files use the same commonalities version"
                 ))
@@ -1664,9 +1665,9 @@ class CAMARAAPIValidator:
         if not test_files:
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Test Files",
-                f"No test files found for API '{api_name}'",
+                f"No test files found for API `{api_name}`",
                 test_dir,
-                f"Create either '{api_name}.feature' or '{api_name}-<operationId>.feature' files"
+                f"Create either `{api_name}.feature` or `{api_name}-<operationId>.feature` files"
             ))
             return result
         
@@ -1745,9 +1746,9 @@ class CAMARAAPIValidator:
             if not self._validate_test_version_line(feature_line, api_version, api_title):
                 result.issues.append(ValidationIssue(
                     Severity.MEDIUM, "Test Version",
-                    f"Feature line doesn't mention API version {api_version}",
+                    f"Feature line doesn't mention API version `{api_version}`",
                     f"{test_file}:line {feature_line_number}",
-                    f"Include version {api_version} in Feature line: {feature_line}"
+                    f"Include version `{api_version}` in Feature line: {feature_line}"
                 ))
         else:
             result.issues.append(ValidationIssue(
@@ -1765,9 +1766,9 @@ class CAMARAAPIValidator:
             if test_op not in api_operations:
                 result.issues.append(ValidationIssue(
                     Severity.CRITICAL, "Test Operation IDs",
-                    f"Test references unknown operation '{test_op}'",
+                    f"Test references unknown operation `{test_op}`",
                     test_file,
-                    f"Use valid operation ID from: {', '.join(api_operations)}"
+                    f"Use valid operation ID from: `{', '.join(api_operations)}`"
                 ))
         
         # For operation-specific test files, validate naming
@@ -1777,9 +1778,9 @@ class CAMARAAPIValidator:
             if expected_operation not in api_operations:
                 result.issues.append(ValidationIssue(
                     Severity.MEDIUM, "Test File Naming",
-                    f"Test file suggests operation '{expected_operation}' but it doesn't exist in API",
+                    f"Test file suggests operation `{expected_operation}` but it doesn't exist in API",
                     test_file,
-                    f"Use valid operation from: {', '.join(api_operations)}"
+                    f"Use valid operation from: `{', '.join(api_operations)}`"
                 ))
 
     def _validate_test_version_line(self, feature_line: str, api_version: str, api_title: str) -> bool:
