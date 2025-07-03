@@ -27,6 +27,62 @@ from enum import Enum
 import datetime
 import traceback
 
+def safe_filename(filename: str, max_length: int = 200) -> str:
+    """Sanitize filename to prevent path traversal and other issues"""
+    # Remove any path components
+    filename = os.path.basename(filename)
+    
+    # Replace dangerous characters
+    filename = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', filename)
+    
+    # Limit length
+    if len(filename) > max_length:
+        name, ext = os.path.splitext(filename)
+        filename = name[:max_length-len(ext)-3] + "..." + ext
+    
+    # Ensure it's not empty or just dots
+    if not filename or filename.replace('.', '').replace('_', '') == '':
+        filename = "sanitized_filename.md"
+    
+    return filename
+
+def validate_directory_path(path: str) -> str:
+    """Validate and normalize directory path"""
+    # Convert to absolute path and resolve
+    abs_path = os.path.abspath(os.path.expanduser(path))
+    
+    # Check if path exists
+    if not os.path.exists(abs_path):
+        raise ValueError(f"Directory does not exist: {abs_path}")
+    
+    # Check if it's actually a directory
+    if not os.path.isdir(abs_path):
+        raise ValueError(f"Path is not a directory: {abs_path}")
+    
+    return abs_path
+
+def sanitize_report_content(content: str) -> str:
+    """Sanitize content for safe inclusion in reports"""
+    # Escape HTML/XML special characters to prevent injection
+    html_escape_table = {
+        "&": "&amp;",
+        '"': "&quot;",
+        "'": "&#x27;",
+        ">": "&gt;",
+        "<": "&lt;",
+    }
+    
+    # Replace problematic characters
+    for char, escape in html_escape_table.items():
+        content = content.replace(char, escape)
+    
+    # Limit content length to prevent DoS
+    max_length = 1000000  # 1MB
+    if len(content) > max_length:
+        content = content[:max_length] + "\n\n⚠️ **Content truncated due to size limits**"
+    
+    return content
+
 class Severity(Enum):
     CRITICAL = "🔴 Critical"
     MEDIUM = "🟡 Medium"
@@ -147,18 +203,25 @@ class CAMARAAPIValidator:
     def validate_api_file(self, file_path: str) -> ValidationResult:
         """Validate a single API YAML file"""
         result = ValidationResult(file_path=file_path)
-        
         try:
-            # Load and parse YAML
-            with open(file_path, 'r', encoding='utf-8') as f:
-                api_spec = yaml.safe_load(f)
-            
-            if not api_spec:
+            # Check file size (prevent DoS)
+            max_size = 10 * 1024 * 1024  # 10MB limit
+            file_size = os.path.getsize(file_path)
+            if file_size > max_size:
                 result.issues.append(ValidationIssue(
-                    Severity.CRITICAL, "File Structure", "Empty or invalid YAML file"
+                    Severity.CRITICAL, "File Size", f"YAML file too large: {file_size} bytes (max: {max_size})"
                 ))
                 return result
-            
+    
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='strict') as f:
+                    api_spec = yaml.safe_load(f)
+            except UnicodeDecodeError as e:
+                result.issues.append(ValidationIssue(
+                    Severity.CRITICAL, "File Encoding", f"Invalid UTF-8 encoding in file: {file_path}"
+                ))
+                return result
+
             # Extract basic info and determine API type
             result.api_name = api_spec.get('info', {}).get('title', 'Unknown')
             result.version = api_spec.get('info', {}).get('version', 'Unknown')
@@ -2121,35 +2184,42 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
     return report_filename
 
 def main():
-    """Main function - complete enhanced validator with all improvements"""
+    """Main function with enhanced security validation"""
     if len(sys.argv) < 4:
-        print("Usage: python complete_enhanced_api_review_validator_v0_6.py <repo_directory> <commonalities_version> <output_directory> [repo_name] [pr_number] [additional_args...]")
-        print("")
-        print("This script analyzes API definitions with complete enhanced validation.")
-        print("Complete enhanced version includes:")
-        print("- Differentiated validation for explicit vs implicit subscription APIs")
-        print("- Enhanced schema equivalence checking (allows differences in examples/descriptions)")
-        print("- Comprehensive validation coverage including all CAMARA requirements")
-        print("- Enhanced filename consistency checking")
-        print("- Improved scope validation")
-        print("- Test alignment validation")
-        print("- Multi-file consistency checking")
-        print("- All previous validation features maintained")
-        print("")
-        print("Parameters:")
-        print("  repo_directory: Path to the repository to analyze")
-        print("  commonalities_version: CAMARA Commonalities version (e.g., 0.6)")
-        print("  output_directory: Where to write the reports")
-        print("  repo_name: (optional) Repository name for unique filename")
-        print("  pr_number: (optional) PR number for unique filename")
-        print("  additional_args: (optional) Additional arguments - ignored")
-        sys.exit(0)
+        print("Usage: python api_review_validator_v0_6.py <repo_directory> <commonalities_version> <output_directory> [repo_name] [pr_number]")
+        sys.exit(1)
     
-    repo_dir = sys.argv[1]
-    commonalities_version = sys.argv[2]
-    output_dir = sys.argv[3]
-    repo_name = sys.argv[4] if len(sys.argv) > 4 else ""
-    pr_number = sys.argv[5] if len(sys.argv) > 5 else ""
+    # Validate and sanitize inputs
+    try:
+        repo_dir = validate_directory_path(sys.argv[1])
+        commonalities_version = sys.argv[2]
+        output_dir = sys.argv[3]
+        
+        # Validate commonalities version format
+        if not re.match(r'^\d+\.\d+$', commonalities_version):
+            raise ValueError(f"Invalid commonalities version format: {commonalities_version}")
+        
+        # Sanitize optional string inputs
+        repo_name = ""
+        pr_number = ""
+        
+        if len(sys.argv) > 4:
+            repo_name = re.sub(r'[^a-zA-Z0-9_-]', '', sys.argv[4])[:100]  # Sanitize and limit
+        
+        if len(sys.argv) > 5:
+            pr_number = re.sub(r'[^0-9]', '', sys.argv[5])[:20]  # Only digits, limit length
+        
+        # Validate/create output directory safely
+        abs_output_dir = os.path.abspath(os.path.expanduser(output_dir))
+        if not os.path.exists(abs_output_dir):
+            os.makedirs(abs_output_dir, mode=0o755)
+        
+    except ValueError as e:
+        print(f"❌ Input validation error: {str(e)}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Unexpected error: {str(e)}")
+        sys.exit(1)
     
     # Log any additional arguments (but ignore them)
     if len(sys.argv) > 6:
