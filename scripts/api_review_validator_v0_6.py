@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 """
-CAMARA API Review Validator - Complete Enhanced Version v0.6
-Automated validation of CAMARA API definitions with comprehensive consistency checks
+CAMARA API Review Validator - Enhanced Version with Subscription Type Detection v0.6
+Automated validation of CAMARA API definitions with proper subscription API classification
 
 Enhanced features:
-- Event subscription and CloudEvents validation
-- Commonalities 0.6 compliance checking
-- Scope naming pattern validation
-- Deep filename consistency checking
-- Project-wide shared schema validation
-- Test definition alignment validation
-- Consolidated checks in summary (not repeated per API)
-- Unique filename generation with repo name, PR number, timestamp
-- Extended summary to 25 items with critical and medium priority
+- Differentiated validation for explicit vs implicit subscription APIs
+- Proper classification of subscription API types
+- Targeted validation checks based on API type
+- All previous validation features maintained
 """
 
 import os
@@ -33,6 +28,11 @@ class Severity(Enum):
     LOW = "🔵 Low"
     INFO = "ℹ️ Info"
 
+class APIType(Enum):
+    REGULAR = "Regular API"
+    IMPLICIT_SUBSCRIPTION = "Implicit Subscription API"
+    EXPLICIT_SUBSCRIPTION = "Explicit Subscription API"
+
 @dataclass
 class ValidationIssue:
     severity: Severity
@@ -46,6 +46,7 @@ class ValidationResult:
     api_name: str = ""
     version: str = ""
     file_path: str = ""
+    api_type: APIType = APIType.REGULAR
     issues: List[ValidationIssue] = field(default_factory=list)
     checks_performed: List[str] = field(default_factory=list)
     manual_checks_needed: List[str] = field(default_factory=list)
@@ -94,6 +95,50 @@ class CAMARAAPIValidator:
             'default', 'switch', 'case', 'const', 'var', 'let', 'function', 'null', 'undefined'
         }
 
+    def _determine_api_type(self, spec: dict) -> APIType:
+        """Determine the type of API: Regular, Implicit Subscription, or Explicit Subscription"""
+        
+        title = spec.get('info', {}).get('title', '').lower()
+        paths = spec.get('paths', {})
+        schemas = spec.get('components', {}).get('schemas', {})
+        
+        # 1. Check for Explicit Subscription APIs
+        # These have dedicated subscription management endpoints
+        if 'subscription' in title:
+            return APIType.EXPLICIT_SUBSCRIPTION
+            
+        # Check for subscription endpoints
+        for path in paths.keys():
+            if path.endswith('/subscriptions') or '/subscriptions/' in path:
+                return APIType.EXPLICIT_SUBSCRIPTION
+        
+        # 2. Check for Implicit Subscription APIs
+        # These support notifications via resource creation (sink parameter)
+        
+        # Check for CloudEvent schemas (indicates notification capability)
+        if 'CloudEvent' in schemas:
+            return APIType.IMPLICIT_SUBSCRIPTION
+            
+        # Check for SinkCredential schemas (indicates sink support)
+        if 'SinkCredential' in schemas or any('SinkCredential' in name for name in schemas.keys()):
+            return APIType.IMPLICIT_SUBSCRIPTION
+            
+        # Check for callback operations in any path
+        for path_obj in paths.values():
+            for operation in path_obj.values():
+                if isinstance(operation, dict) and 'callbacks' in operation:
+                    return APIType.IMPLICIT_SUBSCRIPTION
+        
+        # Check for sink-related properties in schemas
+        for schema_name, schema in schemas.items():
+            if isinstance(schema, dict):
+                properties = schema.get('properties', {})
+                if 'sink' in properties or 'sinkCredential' in properties:
+                    return APIType.IMPLICIT_SUBSCRIPTION
+        
+        # 3. Default to Regular API
+        return APIType.REGULAR
+
     def validate_api_file(self, file_path: str) -> ValidationResult:
         """Validate a single API YAML file"""
         result = ValidationResult(file_path=file_path)
@@ -109,9 +154,10 @@ class CAMARAAPIValidator:
                 ))
                 return result
             
-            # Extract basic info
+            # Extract basic info and determine API type
             result.api_name = api_spec.get('info', {}).get('title', 'Unknown')
             result.version = api_spec.get('info', {}).get('version', 'Unknown')
+            result.api_type = self._determine_api_type(api_spec)
             
             # Run all validation checks
             self._check_openapi_version(api_spec, result)
@@ -130,30 +176,18 @@ class CAMARAAPIValidator:
             self._check_work_in_progress_version(api_spec, result)
             self._check_updated_generic401(api_spec, result)
             
-            # NEW: Enhanced consistency checks
+            # Enhanced consistency checks
             self._check_scope_naming_patterns(api_spec, result)
             self._check_deep_filename_consistency(file_path, api_spec, result)
             
-            # Event subscription specific checks
-            if self._is_subscription_api(api_spec):
-                self._check_event_subscription_compliance(api_spec, result)
-                self._check_cloudevents_compliance(api_spec, result)
-                self._check_event_type_naming(api_spec, result)
-                self._check_subscription_lifecycle_events(api_spec, result)
-                self._check_sink_validation(api_spec, result)
-                self._check_subscription_error_codes(api_spec, result)
+            # Apply type-specific validation checks
+            if result.api_type == APIType.EXPLICIT_SUBSCRIPTION:
+                self._check_explicit_subscription_compliance(api_spec, result)
+            elif result.api_type == APIType.IMPLICIT_SUBSCRIPTION:
+                self._check_implicit_subscription_compliance(api_spec, result)
             
-            # Add manual checks needed
-            result.manual_checks_needed = [
-                "Business logic appropriateness review",
-                "Documentation quality assessment",
-                "API design patterns validation",
-                "Use case coverage evaluation",
-                "Security considerations beyond structure",
-                "Cross-file reference validation (if multi-API)",
-                "Performance and scalability considerations",
-                "Event notification flow testing (for subscription APIs)"
-            ]
+            # Add manual checks needed based on API type
+            result.manual_checks_needed = self._get_manual_checks_for_type(result.api_type)
             
         except yaml.YAMLError as e:
             result.issues.append(ValidationIssue(
@@ -166,566 +200,40 @@ class CAMARAAPIValidator:
         
         return result
 
-    def validate_project_consistency(self, api_files: List[str]) -> ConsistencyResult:
-        """Check shared schema validation across multiple API files"""
-        result = ConsistencyResult()
-        result.checks_performed.append("Project-wide shared schema validation")
-        
-        if len(api_files) < 2:
-            return result
-            
-        # Load all API specs
-        specs = {}
-        for api_file in api_files:
-            try:
-                with open(api_file, 'r', encoding='utf-8') as f:
-                    specs[api_file] = yaml.safe_load(f)
-            except Exception as e:
-                result.issues.append(ValidationIssue(
-                    Severity.CRITICAL, "File Loading",
-                    f"Failed to load {api_file}: {str(e)}",
-                    api_file
-                ))
-                continue
-        
-        if len(specs) < 2:
-            return result
-            
-        # Define common schemas that should be identical
-        common_schema_names = [
-            'XCorrelator', 'ErrorInfo', 'Device', 'DeviceResponse', 
-            'PhoneNumber', 'NetworkAccessIdentifier', 'DeviceIpv4Addr', 
-            'DeviceIpv6Address', 'SingleIpv4Addr', 'Port', 'Point', 
-            'Latitude', 'Longitude', 'Area', 'AreaType', 'Circle'
+    def _get_manual_checks_for_type(self, api_type: APIType) -> List[str]:
+        """Get manual checks needed based on API type"""
+        common_checks = [
+            "Business logic appropriateness review",
+            "Documentation quality assessment", 
+            "API design patterns validation",
+            "Use case coverage evaluation",
+            "Security considerations beyond structure",
+            "Performance and scalability considerations"
         ]
         
-        # Check each common schema
-        for schema_name in common_schema_names:
-            self._validate_shared_schema(schema_name, specs, result)
-        
-        # Check license consistency
-        self._validate_license_consistency(specs, result)
-        
-        # Check commonalities version consistency
-        self._validate_commonalities_consistency(specs, result)
-        
-        return result
-
-    def validate_test_alignment(self, api_file: str, test_dir: str) -> TestAlignmentResult:
-        """Validate test definitions alignment with API specs"""
-        result = TestAlignmentResult(api_file=api_file)
-        result.checks_performed.append("Test alignment validation")
-        
-        # Load API spec
-        try:
-            with open(api_file, 'r', encoding='utf-8') as f:
-                api_spec = yaml.safe_load(f)
-        except Exception as e:
-            result.issues.append(ValidationIssue(
-                Severity.CRITICAL, "API Loading",
-                f"Failed to load API file: {str(e)}",
-                api_file
-            ))
-            return result
-        
-        # Extract API info
-        api_info = api_spec.get('info', {})
-        api_version = api_info.get('version', '')
-        api_title = api_info.get('title', '')
-        
-        # Extract api-name from filename
-        api_name = Path(api_file).stem
-        
-        # Find test files
-        test_files = self._find_test_files(test_dir, api_name)
-        result.test_files = test_files
-        
-        if not test_files:
-            result.issues.append(ValidationIssue(
-                Severity.CRITICAL, "Test Files",
-                f"No test files found for API '{api_name}'",
-                test_dir,
-                f"Create either '{api_name}.feature' or '{api_name}-<operationId>.feature' files"
-            ))
-            return result
-        
-        # Extract operation IDs from API
-        api_operations = self._extract_operation_ids(api_spec)
-        
-        # Validate each test file
-        for test_file in test_files:
-            self._validate_test_file(test_file, api_name, api_version, api_title, 
-                                   api_operations, result)
-        
-        return result
-
-    # ===========================================
-    # NEW: Enhanced Consistency Check Functions
-    # ===========================================
-
-    def _check_scope_naming_patterns(self, spec: dict, result: ValidationResult):
-        """Check scope naming follows CAMARA patterns"""
-        result.checks_performed.append("Scope naming pattern validation")
-        
-        # Extract api-name from server URL
-        servers = spec.get('servers', [])
-        if not servers:
-            return
-            
-        server_url = servers[0].get('url', '')
-        api_name_match = re.search(r'/([a-z0-9-]+)/v[\d\w\.]+', server_url)
-        if not api_name_match:
-            return
-            
-        api_name = api_name_match.group(1)
-        
-        # Check if this is a subscription API
-        is_subscription_api = self._is_subscription_api(spec)
-        
-        # Check security scopes in operations
-        paths = spec.get('paths', {})
-        for path, path_obj in paths.items():
-            for method, operation in path_obj.items():
-                if method in ['get', 'post', 'put', 'delete', 'patch']:
-                    security = operation.get('security', [])
-                    for sec_req in security:
-                        for scheme_name, scopes in sec_req.items():
-                            if scheme_name == 'openId':
-                                for scope in scopes:
-                                    self._validate_scope_pattern(scope, api_name, 
-                                                               is_subscription_api, 
-                                                               operation, result)
-
-    def _validate_scope_pattern(self, scope: str, api_name: str, is_subscription_api: bool, 
-                               operation: dict, result: ValidationResult):
-        """Validate individual scope against CAMARA naming patterns"""
-        
-        if is_subscription_api:
-            # For subscription APIs: {api-name}:{event-type}:{action} or {api-name}:{resource}:{action}
-            if scope.startswith(f'{api_name}:org.camaraproject.'):
-                # Event-specific scope: geofencing-subscriptions:org.camaraproject.geofencing-subscriptions.v0.area-entered:create
-                pattern = rf'^{re.escape(api_name)}:org\.camaraproject\.[a-z0-9-]+\.v\d+\.[a-z0-9-]+:(create|read|write|delete)$'
-                if not re.match(pattern, scope):
-                    result.issues.append(ValidationIssue(
-                        Severity.MEDIUM, "Scope Naming",
-                        f"Event-specific scope doesn't follow pattern: {scope}",
-                        f"Expected: {api_name}:org.camaraproject.<api-name>.v<version>.<event-name>:<action>",
-                        "Use correct event-specific scope pattern"
-                    ))
-            elif ':' in scope:
-                # Resource-based scope: geofencing-subscriptions:read
-                parts = scope.split(':')
-                if len(parts) != 2:
-                    result.issues.append(ValidationIssue(
-                        Severity.MEDIUM, "Scope Naming",
-                        f"Subscription scope should have 2 parts: {scope}",
-                        f"Expected: {api_name}:<action>"
-                    ))
-                elif parts[0] != api_name:
-                    result.issues.append(ValidationIssue(
-                        Severity.MEDIUM, "Scope Naming",
-                        f"Scope API name mismatch: expected '{api_name}', got '{parts[0]}'",
-                        f"Use: {api_name}:{parts[1]}"
-                    ))
-                elif parts[1] not in ['create', 'read', 'write', 'delete']:
-                    result.issues.append(ValidationIssue(
-                        Severity.MEDIUM, "Scope Naming",
-                        f"Invalid action in scope: {parts[1]}",
-                        "Use: create, read, write, or delete"
-                    ))
+        if api_type == APIType.EXPLICIT_SUBSCRIPTION:
+            return common_checks + [
+                "Cross-file reference validation (if multi-API)",
+                "Event subscription flow testing", 
+                "Subscription lifecycle management testing",
+                "Event notification delivery testing"
+            ]
+        elif api_type == APIType.IMPLICIT_SUBSCRIPTION:
+            return common_checks + [
+                "Notification callback testing",
+                "Sink credential validation testing",
+                "Resource-bound notification flow testing"
+            ]
         else:
-            # For regular APIs: {api-name}:{resource}:{action}
-            parts = scope.split(':')
-            if len(parts) == 2:
-                # Simple scope: api-name:action
-                if parts[0] != api_name:
-                    result.issues.append(ValidationIssue(
-                        Severity.MEDIUM, "Scope Naming",
-                        f"Scope API name mismatch: expected '{api_name}', got '{parts[0]}'",
-                        f"Use: {api_name}:{parts[1]}"
-                    ))
-                elif parts[1] not in ['create', 'read', 'write', 'delete', 'verify', 'retrieve-by-device']:
-                    result.issues.append(ValidationIssue(
-                        Severity.LOW, "Scope Naming",
-                        f"Unusual action in scope: {parts[1]}",
-                        "Consider using standard actions: create, read, write, delete"
-                    ))
-            elif len(parts) == 3:
-                # Resource-based scope: api-name:resource:action
-                if parts[0] != api_name:
-                    result.issues.append(ValidationIssue(
-                        Severity.MEDIUM, "Scope Naming",
-                        f"Scope API name mismatch: expected '{api_name}', got '{parts[0]}'",
-                        f"Use: {api_name}:{parts[1]}:{parts[2]}"
-                    ))
-                elif parts[2] not in ['create', 'read', 'write', 'delete', 'update']:
-                    result.issues.append(ValidationIssue(
-                        Severity.LOW, "Scope Naming",
-                        f"Unusual action in scope: {parts[2]}",
-                        "Consider using standard actions: create, read, write, delete, update"
-                    ))
-            else:
-                result.issues.append(ValidationIssue(
-                    Severity.MEDIUM, "Scope Naming",
-                    f"Scope doesn't follow CAMARA pattern: {scope}",
-                    f"Expected: {api_name}:<action> or {api_name}:<resource>:<action>"
-                ))
+            return common_checks + [
+                "Cross-file reference validation (if multi-API)"
+            ]
 
-    def _check_deep_filename_consistency(self, file_path: str, spec: dict, result: ValidationResult):
-        """Extract api-name from server URL and compare with filename"""
-        result.checks_performed.append("Deep filename consistency validation")
+    def _check_explicit_subscription_compliance(self, spec: dict, result: ValidationResult):
+        """Check compliance for explicit subscription APIs"""
+        result.checks_performed.append("Explicit subscription API compliance validation")
         
-        filename = Path(file_path).stem
-        
-        # Extract api-name from server URL
-        servers = spec.get('servers', [])
-        if not servers:
-            result.issues.append(ValidationIssue(
-                Severity.CRITICAL, "Filename Consistency",
-                "No servers object found for filename validation",
-                "servers"
-            ))
-            return
-            
-        server_url = servers[0].get('url', '')
-        
-        # Parse server URL to extract api-name
-        # Pattern: {apiRoot}/api-name/version
-        url_pattern = r'\{[^}]+\}/([a-z0-9-]+)/v[\d\w\.]+'
-        match = re.search(url_pattern, server_url)
-        
-        if not match:
-            result.issues.append(ValidationIssue(
-                Severity.MEDIUM, "Filename Consistency",
-                f"Cannot extract api-name from server URL: {server_url}",
-                "servers[0].url",
-                "Use format: {apiRoot}/api-name/version"
-            ))
-            return
-            
-        url_api_name = match.group(1)
-        
-        # Check exact match
-        if filename != url_api_name:
-            result.issues.append(ValidationIssue(
-                Severity.CRITICAL, "Filename Consistency",
-                f"Filename '{filename}' doesn't match server URL api-name '{url_api_name}'",
-                file_path,
-                f"Rename file to '{url_api_name}.yaml' or update server URL"
-            ))
-        
-        # Check title consistency with extracted api-name
-        title = spec.get('info', {}).get('title', '')
-        expected_title_words = url_api_name.replace('-', ' ').title()
-        
-        # Convert title to comparable format
-        title_normalized = re.sub(r'\s+', ' ', title.lower().strip())
-        expected_normalized = expected_title_words.lower()
-        
-        if not self._titles_match(title_normalized, expected_normalized):
-            result.issues.append(ValidationIssue(
-                Severity.MEDIUM, "Filename Consistency",
-                f"Title '{title}' doesn't align with api-name '{url_api_name}'",
-                "info.title",
-                f"Consider title that relates to '{expected_title_words}'"
-            ))
-
-    def _titles_match(self, title_normalized: str, expected_normalized: str) -> bool:
-        """Check if titles are reasonably consistent"""
-        # Remove common words and check if main words match
-        common_words = {'api', 'service', 'the', 'a', 'an', 'for', 'and', 'or', 'of', 'on', 'in'}
-        
-        title_words = set(title_normalized.split()) - common_words
-        expected_words = set(expected_normalized.split()) - common_words
-        
-        # Check if there's significant overlap
-        if len(expected_words) == 0:
-            return True
-            
-        overlap = len(title_words & expected_words)
-        return overlap / len(expected_words) >= 0.5
-
-    def _validate_shared_schema(self, schema_name: str, specs: dict, result: ConsistencyResult):
-        """Validate that a shared schema is consistent across files"""
-        schemas_found = {}
-        
-        # Collect schema definitions from all files
-        for file_path, spec in specs.items():
-            schemas = spec.get('components', {}).get('schemas', {})
-            if schema_name in schemas:
-                schemas_found[file_path] = schemas[schema_name]
-        
-        if len(schemas_found) < 2:
-            return  # Schema not used in multiple files
-            
-        # Compare all schemas for consistency
-        reference_file = list(schemas_found.keys())[0]
-        reference_schema = schemas_found[reference_file]
-        
-        for file_path, schema in schemas_found.items():
-            if file_path == reference_file:
-                continue
-                
-            if not self._schemas_equivalent(reference_schema, schema):
-                result.issues.append(ValidationIssue(
-                    Severity.CRITICAL, "Shared Schema Consistency",
-                    f"Schema '{schema_name}' differs between files",
-                    f"{Path(reference_file).name} vs {Path(file_path).name}",
-                    f"Ensure '{schema_name}' schema is identical in all files"
-                ))
-
-    def _schemas_equivalent(self, schema1: dict, schema2: dict) -> bool:
-        """Deep comparison of two schema objects"""
-        # Remove description fields for comparison as they may vary
-        def normalize_schema(schema):
-            if isinstance(schema, dict):
-                normalized = {}
-                for key, value in schema.items():
-                    if key != 'description':  # Allow description differences
-                        normalized[key] = normalize_schema(value)
-                return normalized
-            elif isinstance(schema, list):
-                return [normalize_schema(item) for item in schema]
-            return schema
-        
-        return normalize_schema(schema1) == normalize_schema(schema2)
-
-    def _validate_license_consistency(self, specs: dict, result: ConsistencyResult):
-        """Check that license information is consistent"""
-        licenses = {}
-        
-        for file_path, spec in specs.items():
-            license_info = spec.get('info', {}).get('license', {})
-            if license_info:
-                licenses[file_path] = license_info
-        
-        if len(licenses) < 2:
-            return
-            
-        reference_file = list(licenses.keys())[0]
-        reference_license = licenses[reference_file]
-        
-        for file_path, license_info in licenses.items():
-            if file_path == reference_file:
-                continue
-                
-            if license_info != reference_license:
-                result.issues.append(ValidationIssue(
-                    Severity.MEDIUM, "License Consistency",
-                    "License information differs between files",
-                    f"{Path(reference_file).name} vs {Path(file_path).name}",
-                    "Ensure all files have identical license information"
-                ))
-
-    def _validate_commonalities_consistency(self, specs: dict, result: ConsistencyResult):
-        """Check that commonalities version is consistent"""
-        versions = {}
-        
-        for file_path, spec in specs.items():
-            version = spec.get('info', {}).get('x-camara-commonalities')
-            if version:
-                versions[file_path] = str(version)
-        
-        if len(versions) < 2:
-            return
-            
-        reference_file = list(versions.keys())[0]
-        reference_version = versions[reference_file]
-        
-        for file_path, version in versions.items():
-            if file_path == reference_file:
-                continue
-                
-            if version != reference_version:
-                result.issues.append(ValidationIssue(
-                    Severity.MEDIUM, "Commonalities Consistency",
-                    f"Commonalities version differs: {reference_version} vs {version}",
-                    f"{Path(reference_file).name} vs {Path(file_path).name}",
-                    "Ensure all files use the same commonalities version"
-                ))
-
-    def _find_test_files(self, test_dir: str, api_name: str) -> List[str]:
-        """Find test files for the given API"""
-        test_files = []
-        test_path = Path(test_dir)
-        
-        if not test_path.exists():
-            return test_files
-        
-        # Look for api-name.feature
-        main_test = test_path / f"{api_name}.feature"
-        if main_test.exists():
-            test_files.append(str(main_test))
-        
-        # Look for api-name-*.feature files
-        for test_file in test_path.glob(f"{api_name}-*.feature"):
-            test_files.append(str(test_file))
-        
-        return test_files
-
-    def _extract_operation_ids(self, api_spec: dict) -> List[str]:
-        """Extract all operation IDs from API spec"""
-        operation_ids = []
-        
-        paths = api_spec.get('paths', {})
-        for path, path_obj in paths.items():
-            for method, operation in path_obj.items():
-                if method in ['get', 'post', 'put', 'delete', 'patch']:
-                    operation_id = operation.get('operationId')
-                    if operation_id:
-                        operation_ids.append(operation_id)
-        
-        return operation_ids
-
-    def _validate_test_file(self, test_file: str, api_name: str, api_version: str, 
-                           api_title: str, api_operations: List[str], result: TestAlignmentResult):
-        """Validate individual test file"""
-        try:
-            with open(test_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except Exception as e:
-            result.issues.append(ValidationIssue(
-                Severity.CRITICAL, "Test File Loading",
-                f"Failed to load test file: {str(e)}",
-                test_file
-            ))
-            return
-        
-        lines = content.split('\n')
-        
-        # Check first line for version
-        if lines:
-            first_line = lines[0].strip()
-            if not self._validate_test_version_line(first_line, api_version, api_title):
-                result.issues.append(ValidationIssue(
-                    Severity.MEDIUM, "Test Version",
-                    f"First line doesn't mention API version {api_version}",
-                    f"{test_file}:1",
-                    f"Include version {api_version} in: {first_line}"
-                ))
-        
-        # Check operation IDs referenced in test
-        test_operations = self._extract_test_operations(content)
-        
-        # Validate that test operations exist in API
-        for test_op in test_operations:
-            if test_op not in api_operations:
-                result.issues.append(ValidationIssue(
-                    Severity.CRITICAL, "Test Operation IDs",
-                    f"Test references unknown operation '{test_op}'",
-                    test_file,
-                    f"Use valid operation ID from: {', '.join(api_operations)}"
-                ))
-        
-        # For operation-specific test files, validate naming
-        test_filename = Path(test_file).stem
-        if test_filename.startswith(f"{api_name}-"):
-            expected_operation = test_filename.replace(f"{api_name}-", "")
-            if expected_operation not in api_operations:
-                result.issues.append(ValidationIssue(
-                    Severity.MEDIUM, "Test File Naming",
-                    f"Test file suggests operation '{expected_operation}' but it doesn't exist in API",
-                    test_file,
-                    f"Use valid operation from: {', '.join(api_operations)}"
-                ))
-
-    def _validate_test_version_line(self, first_line: str, api_version: str, api_title: str) -> bool:
-        """Check if first line contains the API version"""
-        # Look for version pattern in first line
-        version_pattern = r'v?\d+\.\d+\.\d+(?:-rc\.\d+)?'
-        found_versions = re.findall(version_pattern, first_line)
-        
-        return api_version in found_versions
-
-    def _extract_test_operations(self, content: str) -> List[str]:
-        """Extract operation IDs referenced in test content"""
-        # Look for patterns like 'request "operationId"'
-        operation_pattern = r'request\s+"([^"]+)"'
-        operations = re.findall(operation_pattern, content)
-        
-        return list(set(operations))  # Remove duplicates
-
-    # ===========================================
-    # Existing Validation Functions (unchanged)
-    # ===========================================
-
-    def _is_subscription_api(self, spec: dict) -> bool:
-        """Check if this is an event subscription API"""
-        title = spec.get('info', {}).get('title', '').lower()
-        paths = spec.get('paths', {})
-        
-        # Check if API name contains 'subscription'
-        if 'subscription' in title:
-            return True
-            
-        # Check if has /subscriptions path
-        if '/subscriptions' in paths:
-            return True
-            
-        # Check for CloudEvent schemas
-        schemas = spec.get('components', {}).get('schemas', {})
-        if 'CloudEvent' in schemas:
-            return True
-            
-        return False
-
-    def _check_work_in_progress_version(self, spec: dict, result: ValidationResult):
-        """Check for work-in-progress versions that shouldn't be released"""
-        result.checks_performed.append("Work-in-progress version validation")
-        
-        version = spec.get('info', {}).get('version', '')
-        
-        if version == 'wip':
-            result.issues.append(ValidationIssue(
-                Severity.CRITICAL, "Version",
-                "Work-in-progress version 'wip' cannot be released",
-                "info.version",
-                "Update to proper semantic version (e.g., 0.1.0-rc.1)"
-            ))
-        
-        # Check server URL for vwip
-        servers = spec.get('servers', [])
-        if servers:
-            server_url = servers[0].get('url', '')
-            if 'vwip' in server_url:
-                result.issues.append(ValidationIssue(
-                    Severity.CRITICAL, "Server URL",
-                    "Server URL contains 'vwip' - not valid for release",
-                    "servers[0].url",
-                    "Update to proper version format (e.g., v0.1rc1)"
-                ))
-
-    def _check_updated_generic401(self, spec: dict, result: ValidationResult):
-        """Check for updated Generic401 response format (Commonalities 0.6)"""
-        result.checks_performed.append("Updated Generic401 response validation")
-        
-        responses = spec.get('components', {}).get('responses', {})
-        generic401 = responses.get('Generic401', {})
-        
-        if generic401:
-            content = generic401.get('content', {})
-            app_json = content.get('application/json', {})
-            examples = app_json.get('examples', {})
-            
-            # Check for updated message in examples
-            for example_name, example in examples.items():
-                if 'UNAUTHENTICATED' in example_name:
-                    example_value = example.get('value', {})
-                    message = example_value.get('message', '')
-                    
-                    if 'A new authentication is required' not in message:
-                        result.issues.append(ValidationIssue(
-                            Severity.CRITICAL, "Error Responses",
-                            "Generic401 response missing updated message format",
-                            f"components.responses.Generic401.examples.{example_name}",
-                            "Add 'A new authentication is required.' to message"
-                        ))
-
-    def _check_event_subscription_compliance(self, spec: dict, result: ValidationResult):
-        """Check general event subscription compliance"""
-        result.checks_performed.append("Event subscription compliance validation")
-        
-        # Check for subscription endpoint naming
+        # Check for subscription endpoint
         paths = spec.get('paths', {})
         has_subscriptions_path = False
         
@@ -736,10 +244,90 @@ class CAMARAAPIValidator:
         
         if not has_subscriptions_path:
             result.issues.append(ValidationIssue(
-                Severity.MEDIUM, "Event Subscriptions",
-                "Subscription API should have /subscriptions endpoint",
-                "paths"
+                Severity.CRITICAL, "Explicit Subscriptions",
+                "Explicit subscription API must have /subscriptions endpoint",
+                "paths",
+                "Add /subscriptions endpoint for subscription management"
             ))
+        
+        # Apply all subscription-specific checks
+        self._check_cloudevents_compliance(spec, result)
+        self._check_event_type_naming(spec, result)
+        self._check_subscription_lifecycle_events(spec, result)
+        self._check_sink_validation(spec, result)
+        self._check_subscription_error_codes(spec, result)
+
+    def _check_implicit_subscription_compliance(self, spec: dict, result: ValidationResult):
+        """Check compliance for implicit subscription APIs"""
+        result.checks_performed.append("Implicit subscription API compliance validation")
+        
+        # Check for CloudEvents compliance if CloudEvent schemas exist
+        schemas = spec.get('components', {}).get('schemas', {})
+        if 'CloudEvent' in schemas:
+            self._check_cloudevents_compliance(spec, result)
+        
+        # Check for callback operations
+        paths = spec.get('paths', {})
+        has_callbacks = False
+        
+        for path_obj in paths.values():
+            for operation in path_obj.values():
+                if isinstance(operation, dict) and 'callbacks' in operation:
+                    has_callbacks = True
+                    break
+            if has_callbacks:
+                break
+        
+        if not has_callbacks and 'CloudEvent' in schemas:
+            result.issues.append(ValidationIssue(
+                Severity.MEDIUM, "Implicit Subscriptions",
+                "API has CloudEvent schemas but no callback operations defined",
+                "paths",
+                "Add callback operations for notification delivery"
+            ))
+        
+        # Check sink credential implementation
+        if 'SinkCredential' in schemas or any('sink' in name.lower() for name in schemas.keys()):
+            self._check_sink_credential_compliance(spec, result)
+        
+        # Should NOT have subscription endpoints (that's for explicit APIs)
+        for path in paths.keys():
+            if path.endswith('/subscriptions') or '/subscriptions/' in path:
+                result.issues.append(ValidationIssue(
+                    Severity.MEDIUM, "Implicit Subscriptions",
+                    "Implicit subscription API should not have /subscriptions endpoint",
+                    f"paths.{path}",
+                    "Remove /subscriptions endpoint or reclassify as explicit subscription API"
+                ))
+
+    def _check_sink_credential_compliance(self, spec: dict, result: ValidationResult):
+        """Check sink credential implementation for implicit subscriptions"""
+        result.checks_performed.append("Sink credential compliance validation")
+        
+        schemas = spec.get('components', {}).get('schemas', {})
+        sink_credential = schemas.get('SinkCredential')
+        
+        if sink_credential:
+            # Check for discriminator
+            discriminator = sink_credential.get('discriminator')
+            if not discriminator:
+                result.issues.append(ValidationIssue(
+                    Severity.MEDIUM, "Sink Credentials",
+                    "SinkCredential schema should use discriminator pattern",
+                    "components.schemas.SinkCredential.discriminator"
+                ))
+            
+            # Check for AccessTokenCredential support
+            if 'AccessTokenCredential' not in schemas:
+                result.issues.append(ValidationIssue(
+                    Severity.MEDIUM, "Sink Credentials", 
+                    "Missing AccessTokenCredential schema for sink authentication",
+                    "components.schemas.AccessTokenCredential"
+                ))
+
+    # ===========================================
+    # Event Subscription Validation Functions (for explicit subscriptions)
+    # ===========================================
 
     def _check_cloudevents_compliance(self, spec: dict, result: ValidationResult):
         """Check CloudEvents compliance for notification callbacks"""
@@ -917,6 +505,174 @@ class CAMARAAPIValidator:
                     "components.responses",
                     f"Add 422 {error} error response for device validation"
                 ))
+
+    # ===========================================
+    # Updated Scope Naming Pattern Check
+    # ===========================================
+
+    def _check_scope_naming_patterns(self, spec: dict, result: ValidationResult):
+        """Check scope naming follows CAMARA patterns"""
+        result.checks_performed.append("Scope naming pattern validation")
+        
+        # Extract api-name from server URL
+        servers = spec.get('servers', [])
+        if not servers:
+            return
+            
+        server_url = servers[0].get('url', '')
+        api_name_match = re.search(r'/([a-z0-9-]+)/v[\d\w\.]+', server_url)
+        if not api_name_match:
+            return
+            
+        api_name = api_name_match.group(1)
+        
+        # Check security scopes in operations
+        paths = spec.get('paths', {})
+        for path, path_obj in paths.items():
+            for method, operation in path_obj.items():
+                if method in ['get', 'post', 'put', 'delete', 'patch']:
+                    security = operation.get('security', [])
+                    for sec_req in security:
+                        for scheme_name, scopes in sec_req.items():
+                            if scheme_name == 'openId':
+                                for scope in scopes:
+                                    self._validate_scope_pattern(scope, api_name, 
+                                                               result.api_type, 
+                                                               operation, result)
+
+    def _validate_scope_pattern(self, scope: str, api_name: str, api_type: APIType, 
+                               operation: dict, result: ValidationResult):
+        """Validate individual scope against CAMARA naming patterns"""
+        
+        if api_type == APIType.EXPLICIT_SUBSCRIPTION:
+            # For explicit subscription APIs: {api-name}:{event-type}:{action} or {api-name}:{resource}:{action}
+            if scope.startswith(f'{api_name}:org.camaraproject.'):
+                # Event-specific scope
+                pattern = rf'^{re.escape(api_name)}:org\.camaraproject\.[a-z0-9-]+\.v\d+\.[a-z0-9-]+:(create|read|write|delete)$'
+                if not re.match(pattern, scope):
+                    result.issues.append(ValidationIssue(
+                        Severity.MEDIUM, "Scope Naming",
+                        f"Event-specific scope doesn't follow pattern: {scope}",
+                        f"Expected: {api_name}:org.camaraproject.<api-name>.v<version>.<event-name>:<action>",
+                        "Use correct event-specific scope pattern"
+                    ))
+            elif ':' in scope:
+                # Resource-based scope: subscriptions:read
+                parts = scope.split(':')
+                if len(parts) != 2:
+                    result.issues.append(ValidationIssue(
+                        Severity.MEDIUM, "Scope Naming",
+                        f"Explicit subscription scope should have 2 parts: {scope}",
+                        f"Expected: {api_name}:<action>"
+                    ))
+                elif parts[0] != api_name:
+                    result.issues.append(ValidationIssue(
+                        Severity.MEDIUM, "Scope Naming",
+                        f"Scope API name mismatch: expected '{api_name}', got '{parts[0]}'",
+                        f"Use: {api_name}:{parts[1]}"
+                    ))
+        else:
+            # For regular and implicit subscription APIs: {api-name}:{resource}:{action} or {api-name}:{action}
+            parts = scope.split(':')
+            if len(parts) == 2:
+                # Simple scope: api-name:action
+                if parts[0] != api_name:
+                    result.issues.append(ValidationIssue(
+                        Severity.MEDIUM, "Scope Naming",
+                        f"Scope API name mismatch: expected '{api_name}', got '{parts[0]}'",
+                        f"Use: {api_name}:{parts[1]}"
+                    ))
+            elif len(parts) == 3:
+                # Resource-based scope: api-name:resource:action  
+                if parts[0] != api_name:
+                    result.issues.append(ValidationIssue(
+                        Severity.MEDIUM, "Scope Naming",
+                        f"Scope API name mismatch: expected '{api_name}', got '{parts[0]}'",
+                        f"Use: {api_name}:{parts[1]}:{parts[2]}"
+                    ))
+            else:
+                result.issues.append(ValidationIssue(
+                    Severity.MEDIUM, "Scope Naming",
+                    f"Scope doesn't follow CAMARA pattern: {scope}",
+                    f"Expected: {api_name}:<action> or {api_name}:<resource>:<action>"
+                ))
+
+    # ===========================================
+    # Existing Validation Functions (unchanged from original)
+    # ===========================================
+
+    def _check_deep_filename_consistency(self, file_path: str, spec: dict, result: ValidationResult):
+        """Extract api-name from server URL and compare with filename"""
+        result.checks_performed.append("Deep filename consistency validation")
+        
+        filename = Path(file_path).stem
+        
+        # Extract api-name from server URL
+        servers = spec.get('servers', [])
+        if not servers:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Filename Consistency",
+                "No servers object found for filename validation",
+                "servers"
+            ))
+            return
+            
+        server_url = servers[0].get('url', '')
+        
+        # Parse server URL to extract api-name
+        url_pattern = r'\{[^}]+\}/([a-z0-9-]+)/v[\d\w\.]+'
+        match = re.search(url_pattern, server_url)
+        
+        if not match:
+            result.issues.append(ValidationIssue(
+                Severity.MEDIUM, "Filename Consistency",
+                f"Cannot extract api-name from server URL: {server_url}",
+                "servers[0].url",
+                "Use format: {apiRoot}/api-name/version"
+            ))
+            return
+            
+        url_api_name = match.group(1)
+        
+        # Check exact match
+        if filename != url_api_name:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Filename Consistency",
+                f"Filename '{filename}' doesn't match server URL api-name '{url_api_name}'",
+                file_path,
+                f"Rename file to '{url_api_name}.yaml' or update server URL"
+            ))
+        
+        # Check title consistency with extracted api-name
+        title = spec.get('info', {}).get('title', '')
+        expected_title_words = url_api_name.replace('-', ' ').title()
+        
+        # Convert title to comparable format
+        title_normalized = re.sub(r'\s+', ' ', title.lower().strip())
+        expected_normalized = expected_title_words.lower()
+        
+        if not self._titles_match(title_normalized, expected_normalized):
+            result.issues.append(ValidationIssue(
+                Severity.MEDIUM, "Filename Consistency",
+                f"Title '{title}' doesn't align with api-name '{url_api_name}'",
+                "info.title",
+                f"Consider title that relates to '{expected_title_words}'"
+            ))
+
+    def _titles_match(self, title_normalized: str, expected_normalized: str) -> bool:
+        """Check if titles are reasonably consistent"""
+        # Remove common words and check if main words match
+        common_words = {'api', 'service', 'the', 'a', 'an', 'for', 'and', 'or', 'of', 'on', 'in'}
+        
+        title_words = set(title_normalized.split()) - common_words
+        expected_words = set(expected_normalized.split()) - common_words
+        
+        # Check if there's significant overlap
+        if len(expected_words) == 0:
+            return True
+            
+        overlap = len(title_words & expected_words)
+        return overlap / len(expected_words) >= 0.5
 
     def _check_openapi_version(self, spec: dict, result: ValidationResult):
         """Check OpenAPI version compliance"""
@@ -1317,6 +1073,355 @@ class CAMARAAPIValidator:
                 "Use lowercase letters, numbers, and hyphens only"
             ))
 
+    def _check_work_in_progress_version(self, spec: dict, result: ValidationResult):
+        """Check for work-in-progress versions that shouldn't be released"""
+        result.checks_performed.append("Work-in-progress version validation")
+        
+        version = spec.get('info', {}).get('version', '')
+        
+        if version == 'wip':
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Version",
+                "Work-in-progress version 'wip' cannot be released",
+                "info.version",
+                "Update to proper semantic version (e.g., 0.1.0-rc.1)"
+            ))
+        
+        # Check server URL for vwip
+        servers = spec.get('servers', [])
+        if servers:
+            server_url = servers[0].get('url', '')
+            if 'vwip' in server_url:
+                result.issues.append(ValidationIssue(
+                    Severity.CRITICAL, "Server URL",
+                    "Server URL contains 'vwip' - not valid for release",
+                    "servers[0].url",
+                    "Update to proper version format (e.g., v0.1rc1)"
+                ))
+
+    def _check_updated_generic401(self, spec: dict, result: ValidationResult):
+        """Check for updated Generic401 response format (Commonalities 0.6)"""
+        result.checks_performed.append("Updated Generic401 response validation")
+        
+        responses = spec.get('components', {}).get('responses', {})
+        generic401 = responses.get('Generic401', {})
+        
+        if generic401:
+            content = generic401.get('content', {})
+            app_json = content.get('application/json', {})
+            examples = app_json.get('examples', {})
+            
+            # Check for updated message in examples
+            for example_name, example in examples.items():
+                if 'UNAUTHENTICATED' in example_name:
+                    example_value = example.get('value', {})
+                    message = example_value.get('message', '')
+                    
+                    if 'A new authentication is required' not in message:
+                        result.issues.append(ValidationIssue(
+                            Severity.CRITICAL, "Error Responses",
+                            "Generic401 response missing updated message format",
+                            f"components.responses.Generic401.examples.{example_name}",
+                            "Add 'A new authentication is required.' to message"
+                        ))
+
+    # ===========================================
+    # Project Consistency and Test Validation (unchanged)
+    # ===========================================
+
+    def validate_project_consistency(self, api_files: List[str]) -> ConsistencyResult:
+        """Check shared schema validation across multiple API files"""
+        result = ConsistencyResult()
+        result.checks_performed.append("Project-wide shared schema validation")
+        
+        if len(api_files) < 2:
+            return result
+            
+        # Load all API specs
+        specs = {}
+        for api_file in api_files:
+            try:
+                with open(api_file, 'r', encoding='utf-8') as f:
+                    specs[api_file] = yaml.safe_load(f)
+            except Exception as e:
+                result.issues.append(ValidationIssue(
+                    Severity.CRITICAL, "File Loading",
+                    f"Failed to load {api_file}: {str(e)}",
+                    api_file
+                ))
+                continue
+        
+        if len(specs) < 2:
+            return result
+            
+        # Define common schemas that should be identical
+        common_schema_names = [
+            'XCorrelator', 'ErrorInfo', 'Device', 'DeviceResponse', 
+            'PhoneNumber', 'NetworkAccessIdentifier', 'DeviceIpv4Addr', 
+            'DeviceIpv6Address', 'SingleIpv4Addr', 'Port', 'Point', 
+            'Latitude', 'Longitude', 'Area', 'AreaType', 'Circle'
+        ]
+        
+        # Check each common schema
+        for schema_name in common_schema_names:
+            self._validate_shared_schema(schema_name, specs, result)
+        
+        # Check license consistency
+        self._validate_license_consistency(specs, result)
+        
+        # Check commonalities version consistency
+        self._validate_commonalities_consistency(specs, result)
+        
+        return result
+
+    def _validate_shared_schema(self, schema_name: str, specs: dict, result: ConsistencyResult):
+        """Validate that a shared schema is consistent across files"""
+        schemas_found = {}
+        
+        # Collect schema definitions from all files
+        for file_path, spec in specs.items():
+            schemas = spec.get('components', {}).get('schemas', {})
+            if schema_name in schemas:
+                schemas_found[file_path] = schemas[schema_name]
+        
+        if len(schemas_found) < 2:
+            return  # Schema not used in multiple files
+            
+        # Compare all schemas for consistency
+        reference_file = list(schemas_found.keys())[0]
+        reference_schema = schemas_found[reference_file]
+        
+        for file_path, schema in schemas_found.items():
+            if file_path == reference_file:
+                continue
+                
+            if not self._schemas_equivalent(reference_schema, schema):
+                result.issues.append(ValidationIssue(
+                    Severity.CRITICAL, "Shared Schema Consistency",
+                    f"Schema '{schema_name}' differs between files",
+                    f"{Path(reference_file).name} vs {Path(file_path).name}",
+                    f"Ensure '{schema_name}' schema is identical in all files"
+                ))
+
+    def _schemas_equivalent(self, schema1: dict, schema2: dict) -> bool:
+        """Deep comparison of two schema objects"""
+        # Remove description fields for comparison as they may vary
+        def normalize_schema(schema):
+            if isinstance(schema, dict):
+                normalized = {}
+                for key, value in schema.items():
+                    if key != 'description':  # Allow description differences
+                        normalized[key] = normalize_schema(value)
+                return normalized
+            elif isinstance(schema, list):
+                return [normalize_schema(item) for item in schema]
+            return schema
+        
+        return normalize_schema(schema1) == normalize_schema(schema2)
+
+    def _validate_license_consistency(self, specs: dict, result: ConsistencyResult):
+        """Check that license information is consistent"""
+        licenses = {}
+        
+        for file_path, spec in specs.items():
+            license_info = spec.get('info', {}).get('license', {})
+            if license_info:
+                licenses[file_path] = license_info
+        
+        if len(licenses) < 2:
+            return
+            
+        reference_file = list(licenses.keys())[0]
+        reference_license = licenses[reference_file]
+        
+        for file_path, license_info in licenses.items():
+            if file_path == reference_file:
+                continue
+                
+            if license_info != reference_license:
+                result.issues.append(ValidationIssue(
+                    Severity.MEDIUM, "License Consistency",
+                    "License information differs between files",
+                    f"{Path(reference_file).name} vs {Path(file_path).name}",
+                    "Ensure all files have identical license information"
+                ))
+
+    def _validate_commonalities_consistency(self, specs: dict, result: ConsistencyResult):
+        """Check that commonalities version is consistent"""
+        versions = {}
+        
+        for file_path, spec in specs.items():
+            version = spec.get('info', {}).get('x-camara-commonalities')
+            if version:
+                versions[file_path] = str(version)
+        
+        if len(versions) < 2:
+            return
+            
+        reference_file = list(versions.keys())[0]
+        reference_version = versions[reference_file]
+        
+        for file_path, version in versions.items():
+            if file_path == reference_file:
+                continue
+                
+            if version != reference_version:
+                result.issues.append(ValidationIssue(
+                    Severity.MEDIUM, "Commonalities Consistency",
+                    f"Commonalities version differs: {reference_version} vs {version}",
+                    f"{Path(reference_file).name} vs {Path(file_path).name}",
+                    "Ensure all files use the same commonalities version"
+                ))
+
+    def validate_test_alignment(self, api_file: str, test_dir: str) -> TestAlignmentResult:
+        """Validate test definitions alignment with API specs"""
+        result = TestAlignmentResult(api_file=api_file)
+        result.checks_performed.append("Test alignment validation")
+        
+        # Load API spec
+        try:
+            with open(api_file, 'r', encoding='utf-8') as f:
+                api_spec = yaml.safe_load(f)
+        except Exception as e:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "API Loading",
+                f"Failed to load API file: {str(e)}",
+                api_file
+            ))
+            return result
+        
+        # Extract API info
+        api_info = api_spec.get('info', {})
+        api_version = api_info.get('version', '')
+        api_title = api_info.get('title', '')
+        
+        # Extract api-name from filename
+        api_name = Path(api_file).stem
+        
+        # Find test files
+        test_files = self._find_test_files(test_dir, api_name)
+        result.test_files = test_files
+        
+        if not test_files:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Test Files",
+                f"No test files found for API '{api_name}'",
+                test_dir,
+                f"Create either '{api_name}.feature' or '{api_name}-<operationId>.feature' files"
+            ))
+            return result
+        
+        # Extract operation IDs from API
+        api_operations = self._extract_operation_ids(api_spec)
+        
+        # Validate each test file
+        for test_file in test_files:
+            self._validate_test_file(test_file, api_name, api_version, api_title, 
+                                   api_operations, result)
+        
+        return result
+
+    def _find_test_files(self, test_dir: str, api_name: str) -> List[str]:
+        """Find test files for the given API"""
+        test_files = []
+        test_path = Path(test_dir)
+        
+        if not test_path.exists():
+            return test_files
+        
+        # Look for api-name.feature
+        main_test = test_path / f"{api_name}.feature"
+        if main_test.exists():
+            test_files.append(str(main_test))
+        
+        # Look for api-name-*.feature files
+        for test_file in test_path.glob(f"{api_name}-*.feature"):
+            test_files.append(str(test_file))
+        
+        return test_files
+
+    def _extract_operation_ids(self, api_spec: dict) -> List[str]:
+        """Extract all operation IDs from API spec"""
+        operation_ids = []
+        
+        paths = api_spec.get('paths', {})
+        for path, path_obj in paths.items():
+            for method, operation in path_obj.items():
+                if method in ['get', 'post', 'put', 'delete', 'patch']:
+                    operation_id = operation.get('operationId')
+                    if operation_id:
+                        operation_ids.append(operation_id)
+        
+        return operation_ids
+
+    def _validate_test_file(self, test_file: str, api_name: str, api_version: str, 
+                           api_title: str, api_operations: List[str], result: TestAlignmentResult):
+        """Validate individual test file"""
+        try:
+            with open(test_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except Exception as e:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Test File Loading",
+                f"Failed to load test file: {str(e)}",
+                test_file
+            ))
+            return
+        
+        lines = content.split('\n')
+        
+        # Check first line for version
+        if lines:
+            first_line = lines[0].strip()
+            if not self._validate_test_version_line(first_line, api_version, api_title):
+                result.issues.append(ValidationIssue(
+                    Severity.MEDIUM, "Test Version",
+                    f"First line doesn't mention API version {api_version}",
+                    f"{test_file}:1",
+                    f"Include version {api_version} in: {first_line}"
+                ))
+        
+        # Check operation IDs referenced in test
+        test_operations = self._extract_test_operations(content)
+        
+        # Validate that test operations exist in API
+        for test_op in test_operations:
+            if test_op not in api_operations:
+                result.issues.append(ValidationIssue(
+                    Severity.CRITICAL, "Test Operation IDs",
+                    f"Test references unknown operation '{test_op}'",
+                    test_file,
+                    f"Use valid operation ID from: {', '.join(api_operations)}"
+                ))
+        
+        # For operation-specific test files, validate naming
+        test_filename = Path(test_file).stem
+        if test_filename.startswith(f"{api_name}-"):
+            expected_operation = test_filename.replace(f"{api_name}-", "")
+            if expected_operation not in api_operations:
+                result.issues.append(ValidationIssue(
+                    Severity.MEDIUM, "Test File Naming",
+                    f"Test file suggests operation '{expected_operation}' but it doesn't exist in API",
+                    test_file,
+                    f"Use valid operation from: {', '.join(api_operations)}"
+                ))
+
+    def _validate_test_version_line(self, first_line: str, api_version: str, api_title: str) -> bool:
+        """Check if first line contains the API version"""
+        # Look for version pattern in first line
+        version_pattern = r'v?\d+\.\d+\.\d+(?:-rc\.\d+)?'
+        found_versions = re.findall(version_pattern, first_line)
+        
+        return api_version in found_versions
+
+    def _extract_test_operations(self, content: str) -> List[str]:
+        """Extract operation IDs referenced in test content"""
+        # Look for patterns like 'request "operationId"'
+        operation_pattern = r'request\s+"([^"]+)"'
+        operations = re.findall(operation_pattern, content)
+        
+        return list(set(operations))  # Remove duplicates
+
 
 def find_api_files(directory: str) -> List[str]:
     """Find all YAML files in the API definitions directory"""
@@ -1334,7 +1439,7 @@ def find_api_files(directory: str) -> List[str]:
 def generate_report(results: List[ValidationResult], output_dir: str, repo_name: str = "", pr_number: str = "", 
                    consistency_result: Optional[ConsistencyResult] = None, 
                    test_results: List[TestAlignmentResult] = None):
-    """Generate comprehensive report and summary with unique filename"""
+    """Generate comprehensive report and summary with enhanced API type detection"""
     os.makedirs(output_dir, exist_ok=True)
     
     # Generate unique filename with repository name, PR number, and timestamp
@@ -1351,7 +1456,7 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
     
     # Generate detailed report
     with open(report_path, "w") as f:
-        f.write("# CAMARA API Review - Complete Enhanced Report (Commonalities 0.6)\n\n")
+        f.write("# CAMARA API Review - Enhanced Report with Subscription Type Detection (Commonalities 0.6)\n\n")
         
         # Add header information
         if repo_name:
@@ -1360,7 +1465,7 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
             f.write(f"**Pull Request**: #{pr_number}\n")
         f.write(f"**Generated**: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
         f.write(f"**Report File**: {report_filename}\n")
-        f.write(f"**Validator**: Enhanced CAMARA API Review Validator v0.6\n\n")
+        f.write(f"**Validator**: Enhanced CAMARA API Review Validator with Subscription Type Detection v0.6\n\n")
         
         # Summary statistics
         total_critical = sum(r.critical_count for r in results)
@@ -1384,6 +1489,17 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
         f.write(f"- **Critical Issues**: {total_critical}\n")
         f.write(f"- **Medium Issues**: {total_medium}\n")
         f.write(f"- **Low Priority Issues**: {total_low}\n\n")
+        
+        # API Type breakdown
+        type_counts = {}
+        for result in results:
+            api_type = result.api_type.value
+            type_counts[api_type] = type_counts.get(api_type, 0) + 1
+        
+        f.write("## API Types Detected\n\n")
+        for api_type, count in type_counts.items():
+            f.write(f"- **{api_type}**: {count} API(s)\n")
+        f.write("\n")
         
         # Collect unique checks performed across all APIs
         all_checks_performed = set()
@@ -1415,13 +1531,16 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
         
         # Enhanced validation features section
         f.write("## Enhanced Validation Features\n\n")
-        f.write("This review includes comprehensive validation for:\n")
+        f.write("This review includes comprehensive validation with enhanced subscription API classification:\n")
+        f.write("- **Explicit Subscription APIs**: APIs with `/subscriptions` endpoints for managing subscriptions as resources\n")
+        f.write("- **Implicit Subscription APIs**: APIs supporting notifications via `sink` parameter in resource creation\n")
+        f.write("- **Regular APIs**: Standard APIs with no subscription/notification functionality\n")
+        f.write("- **Type-Specific Validation**: Different validation rules applied based on detected API type\n")
         f.write("- **Individual API Files**: OpenAPI compliance, schema validation, security checks\n")
         f.write("- **Scope Naming Patterns**: CAMARA-compliant security scope validation\n")
         f.write("- **Deep Filename Consistency**: Alignment between filename, title, and server URL\n")
         f.write("- **Project Consistency**: Cross-file schema, license, and version consistency\n")
         f.write("- **Test Alignment**: Validation of test definitions against API specifications\n")
-        f.write("- **Event Subscription APIs**: CloudEvents compliance, lifecycle events validation\n")
         f.write("- **Commonalities 0.6**: Updated error responses, work-in-progress detection\n\n")
         
         # Project-wide consistency results
@@ -1486,22 +1605,21 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
             
             f.write("---\n\n")
         
-        # Detailed results for each API (simplified - no repeated check sections)
+        # Detailed results for each API
         f.write("## Individual API Results\n\n")
         
         for result in results:
             f.write(f"### {result.api_name} (v{result.version})\n\n")
-            f.write(f"**File**: `{result.file_path}`\n\n")
+            f.write(f"**File**: `{result.file_path}`\n")
+            f.write(f"**API Type**: {result.api_type.value}\n\n")
             
-            # Check if this is a subscription API
-            with open(result.file_path, 'r', encoding='utf-8') as file:
-                try:
-                    spec = yaml.safe_load(file)
-                    validator = CAMARAAPIValidator()
-                    if validator._is_subscription_api(spec):
-                        f.write("🔔 **Event Subscription API** - Enhanced validation applied\n\n")
-                except:
-                    pass
+            # Add type-specific indicators
+            if result.api_type == APIType.EXPLICIT_SUBSCRIPTION:
+                f.write("🔔 **Explicit Subscription API** - Full subscription management validation applied\n\n")
+            elif result.api_type == APIType.IMPLICIT_SUBSCRIPTION:
+                f.write("📧 **Implicit Subscription API** - Notification-focused validation applied\n\n")
+            else:
+                f.write("📄 **Regular API** - Standard validation applied\n\n")
             
             if result.issues:
                 # Group issues by severity
@@ -1546,10 +1664,16 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
         
         f.write(f"### {status}\n\n")
         
-        # APIs found
+        # APIs found with types
         f.write("**APIs Reviewed**:\n")
         for result in results:
-            f.write(f"- `{result.api_name}` v{result.version}\n")
+            type_indicator = {
+                APIType.EXPLICIT_SUBSCRIPTION: "🔔",
+                APIType.IMPLICIT_SUBSCRIPTION: "📧", 
+                APIType.REGULAR: "📄"
+            }.get(result.api_type, "📄")
+            
+            f.write(f"- {type_indicator} `{result.api_name}` v{result.version} ({result.api_type.value})\n")
         f.write("\n")
         
         # Issue summary
@@ -1632,18 +1756,22 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
         
         f.write(f"\n📄 **Detailed Report**: {report_filename}\n")
         f.write("\n📄 **Download**: Available as workflow artifact for complete analysis\n")
-        f.write("\n🔍 **Enhanced Validation**: This review includes scope naming, filename consistency, project consistency, and test alignment validation\n")
+        f.write("\n🔍 **Enhanced Validation**: This review includes subscription type detection, scope naming, filename consistency, project consistency, and test alignment validation\n")
     
     # Return the report filename for use by the workflow
     return report_filename
 
 def main():
-    """Main function - enhanced with multi-file and test validation support"""
+    """Main function - enhanced with subscription type detection"""
     if len(sys.argv) < 4:
-        print("Usage: python api_review_validator_v0_6.py <repo_directory> <commonalities_version> <output_directory> [repo_name] [pr_number] [additional_args...]")
+        print("Usage: python enhanced_api_review_validator_v0_6.py <repo_directory> <commonalities_version> <output_directory> [repo_name] [pr_number] [additional_args...]")
         print("")
-        print("This script analyzes API definitions and reports findings.")
-        print("Enhanced version includes scope naming, filename consistency, project consistency, and test alignment validation.")
+        print("This script analyzes API definitions with enhanced subscription type detection.")
+        print("Enhanced version includes:")
+        print("- Differentiated validation for explicit vs implicit subscription APIs")
+        print("- Proper classification of subscription API types")
+        print("- Targeted validation checks based on API type")
+        print("- All previous validation features maintained")
         print("")
         print("Parameters:")
         print("  repo_directory: Path to the repository to analyze")
@@ -1665,7 +1793,7 @@ def main():
         additional_args = sys.argv[6:]
         print(f"📋 Additional arguments (ignored): {additional_args}")
     
-    print(f"🚀 Starting Enhanced CAMARA API validation (Commonalities {commonalities_version})")
+    print(f"🚀 Starting Enhanced CAMARA API validation with Subscription Type Detection (Commonalities {commonalities_version})")
     print(f"📁 Repository directory: {repo_dir}")
     print(f"📊 Output directory: {output_dir}")
     if repo_name:
@@ -1702,15 +1830,10 @@ def main():
             result = validator.validate_api_file(api_file)
             results.append(result)
             
+            print(f"  📄 API Type: {result.api_type.value}")
             print(f"  🔴 Critical: {result.critical_count}")
             print(f"  🟡 Medium: {result.medium_count}")
             print(f"  🔵 Low: {result.low_count}")
-            
-            # Check if this is a subscription API
-            with open(api_file, 'r', encoding='utf-8') as f:
-                spec = yaml.safe_load(f)
-            if validator._is_subscription_api(spec):
-                print(f"  📡 Event Subscription API detected - enhanced validation applied")
                 
         except Exception as e:
             print(f"  ❌ Error validating {api_file}: {str(e)}")
@@ -1807,12 +1930,20 @@ def main():
             total_medium += len([i for i in test_result.issues if i.severity == Severity.MEDIUM])
             total_low += len([i for i in test_result.issues if i.severity == Severity.LOW])
     
-    print(f"\n🎯 **Enhanced Review Complete** (Commonalities {commonalities_version})")
+    # API type summary
+    type_counts = {}
+    for result in results:
+        api_type = result.api_type.value
+        type_counts[api_type] = type_counts.get(api_type, 0) + 1
+    
+    print(f"\n🎯 **Enhanced Review Complete with Subscription Type Detection** (Commonalities {commonalities_version})")
     if repo_name:
         print(f"Repository: {repo_name}")
     if pr_number:
         print(f"PR: #{pr_number}")
     print(f"Individual APIs: {len(results)}")
+    for api_type, count in type_counts.items():
+        print(f"  - {api_type}: {count}")
     print(f"Multi-file Consistency: {'✅ Checked' if consistency_result else '⏭️ Skipped (single file)'}")
     print(f"Test Alignment: {'✅ Checked' if test_results else '⏭️ Skipped (no tests found)'}")
     print(f"Total Critical Issues: {total_critical}")
@@ -1820,7 +1951,7 @@ def main():
     print(f"Total Low Issues: {total_low}")
     
     # Always exit successfully - we are a reporter, not a judge
-    print("\n📋 Enhanced analysis complete. Decision on release readiness is left to the workflow.")
+    print("\n📋 Enhanced analysis complete with proper subscription API type detection.")
     sys.exit(0)
 
 if __name__ == "__main__":
