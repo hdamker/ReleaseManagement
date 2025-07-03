@@ -84,43 +84,24 @@ jobs:
           else
             echo "ℹ️ Comment does not start with '/rc-api-review', skipping"
             echo "should_run=false" >> $GITHUB_OUTPUT
-          fi      - name: Check Comment Trigger
-        id: check
-        run: |
-          if [[ "${{ github.event_name }}" != "issue_comment" ]]; then
-            echo "ℹ️ Not an issue comment event, skipping comment processing"
-            echo "should_run=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          # Use jq to safely extract comment body and get first line only
-          COMMENT_FIRST_LINE=$(echo '${{ toJSON(github.event.comment.body) }}' | jq -r '. | split("\n")[0]')
-          
-          echo "Comment first line: '$COMMENT_FIRST_LINE'"
-          
-          # Check if comment starts with /rc-api-review
-          if [[ "$COMMENT_FIRST_LINE" == "/rc-api-review"* ]]; then
-            echo "✅ Valid trigger comment found"
-            echo "should_run=true" >> $GITHUB_OUTPUT
-          else
-            echo "ℹ️ Comment does not start with '/rc-api-review', skipping"
-            echo "should_run=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Extract PR URL from Issue Description
         id: extract
         if: github.event_name == 'issue_comment' && steps.check.outputs.should_run == 'true'
         run: |
-          # Get issue details
-          ISSUE_BODY=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}" | \
-            jq -r '.body // ""')
+          # Get issue details and write response to file
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}" > issue_response.json
+          
+          # Extract issue body safely using jq and write to file
+          jq -r '.body // ""' issue_response.json > issue_body.txt
           
           echo "Issue body received, extracting PR URL..."
           
-          # Extract lines 3 and 4 from issue description
-          LINE3=$(echo "$ISSUE_BODY" | sed -n '3p')
-          LINE4=$(echo "$ISSUE_BODY" | sed -n '4p')
+          # Extract lines 3 and 4 safely
+          LINE3=$(sed -n '3p' issue_body.txt)
+          LINE4=$(sed -n '4p' issue_body.txt)
           
           echo "Line 3: $LINE3"
           echo "Line 4: $LINE4"
@@ -135,6 +116,9 @@ jobs:
           elif [[ "$LINE4" =~ https://github\.com/camaraproject/[^/]+/pull/[0-9]+ ]]; then
             PR_URL=$(echo "$LINE4" | grep -oE 'https://github\.com/camaraproject/[^/]+/pull/[0-9]+')
           fi
+          
+          # Clean up
+          rm -f issue_response.json issue_body.txt
           
           if [[ -z "$PR_URL" ]]; then
             echo "❌ No valid CAMARA PR URL found in lines 3-4 of issue description"
