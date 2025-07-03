@@ -142,12 +142,26 @@ jobs:
               # For RC reviews in issues, extract PR URL from issue description
               ISSUE_BODY=$(gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }} --jq '.body')
               
-              # Extract PR URL from lines 3-4 (accounting for title and blank line)
-              PR_URL=$(echo "$ISSUE_BODY" | sed -n '3,4p' | grep -E 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
+              # Enhanced extraction: Handle various formats including markdown lists
+              # First try to extract from lines 3-4, then clean up any markdown formatting
+              PR_URL_RAW=$(echo "$ISSUE_BODY" | sed -n '3,4p' | grep -E 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
+              
+              # Clean up the URL by extracting just the URL part, removing markdown list markers, spaces, etc.
+              PR_URL=$(echo "$PR_URL_RAW" | grep -oE 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
               
               if [[ -z "$PR_URL" ]]; then
                 echo "❌ No PR URL found in issue description for /rc-api-review"
-                echo "Expected format: https://github.com/camaraproject/[repo]/pull/[number]"
+                echo ""
+                echo "📋 Issue body analysis:"
+                echo "Line 3: $(echo "$ISSUE_BODY" | sed -n '3p')"
+                echo "Line 4: $(echo "$ISSUE_BODY" | sed -n '4p')"
+                echo "Raw extraction: '$PR_URL_RAW'"
+                echo ""
+                echo "Expected formats:"
+                echo "  - https://github.com/camaraproject/[repo]/pull/[number]"
+                echo "  - Plain URL: https://github.com/camaraproject/MyAPI/pull/123"
+                echo "  - List item: - https://github.com/camaraproject/MyAPI/pull/123"
+                echo "  - Markdown link: [PR](https://github.com/camaraproject/MyAPI/pull/123)"
                 echo ""
                 echo "Issue description should be formatted like:"
                 echo "# Release Review for API v1.0.0"
@@ -158,7 +172,10 @@ jobs:
                 exit 1
               fi
               
-              echo "✅ Found PR URL: $PR_URL"
+              echo "✅ Found and cleaned PR URL: $PR_URL"
+              echo "  Raw extraction: '$PR_URL_RAW'"
+              echo "  Cleaned URL: '$PR_URL'"
+              
               echo "pull_request_url=$PR_URL" >> $GITHUB_OUTPUT
               echo "issue_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
               echo "pr_number=" >> $GITHUB_OUTPUT
