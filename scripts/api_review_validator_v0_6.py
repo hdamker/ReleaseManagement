@@ -1458,6 +1458,44 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
     
     report_path = f"{output_dir}/{report_filename}"
     
+    # Calculate summary statistics
+    total_critical = sum(r.critical_count for r in results)
+    total_medium = sum(r.medium_count for r in results)
+    total_low = sum(r.low_count for r in results)
+    
+    # Add consistency and test results to totals
+    if consistency_result:
+        total_critical += len([i for i in consistency_result.issues if i.severity == Severity.CRITICAL])
+        total_medium += len([i for i in consistency_result.issues if i.severity == Severity.MEDIUM])
+        total_low += len([i for i in consistency_result.issues if i.severity == Severity.LOW])
+    
+    if test_results:
+        for test_result in test_results:
+            total_critical += len([i for i in test_result.issues if i.severity == Severity.CRITICAL])
+            total_medium += len([i for i in test_result.issues if i.severity == Severity.MEDIUM])
+            total_low += len([i for i in test_result.issues if i.severity == Severity.LOW])
+    
+    # API Type breakdown
+    type_counts = {}
+    for result in results:
+        api_type = result.api_type.value
+        type_counts[api_type] = type_counts.get(api_type, 0) + 1
+    
+    # Collect unique checks performed across all APIs (for later sections)
+    all_checks_performed = set()
+    all_manual_checks = set()
+    
+    for result in results:
+        all_checks_performed.update(result.checks_performed)
+        all_manual_checks.update(result.manual_checks_needed)
+    
+    if consistency_result:
+        all_checks_performed.update(consistency_result.checks_performed)
+    
+    if test_results:
+        for test_result in test_results:
+            all_checks_performed.update(test_result.checks_performed)
+    
     # Generate detailed report
     with open(report_path, "w") as f:
         f.write("# CAMARA API Review - Enhanced Report with Subscription Type Detection (Commonalities 0.6)\n\n")
@@ -1471,23 +1509,7 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
         f.write(f"**Report File**: {report_filename}\n")
         f.write(f"**Validator**: Enhanced CAMARA API Review Validator with Subscription Type Detection v0.6\n\n")
         
-        # Summary statistics
-        total_critical = sum(r.critical_count for r in results)
-        total_medium = sum(r.medium_count for r in results)
-        total_low = sum(r.low_count for r in results)
-        
-        # Add consistency and test results to totals
-        if consistency_result:
-            total_critical += len([i for i in consistency_result.issues if i.severity == Severity.CRITICAL])
-            total_medium += len([i for i in consistency_result.issues if i.severity == Severity.MEDIUM])
-            total_low += len([i for i in consistency_result.issues if i.severity == Severity.LOW])
-        
-        if test_results:
-            for test_result in test_results:
-                total_critical += len([i for i in test_result.issues if i.severity == Severity.CRITICAL])
-                total_medium += len([i for i in test_result.issues if i.severity == Severity.MEDIUM])
-                total_low += len([i for i in test_result.issues if i.severity == Severity.LOW])
-        
+        # 1. SUMMARY
         f.write("## Summary\n\n")
         f.write(f"- **APIs Reviewed**: {len(results)}\n")
         f.write(f"- **Critical Issues**: {total_critical}\n")
@@ -1495,121 +1517,12 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
         f.write(f"- **Low Priority Issues**: {total_low}\n\n")
         
         # API Type breakdown
-        type_counts = {}
-        for result in results:
-            api_type = result.api_type.value
-            type_counts[api_type] = type_counts.get(api_type, 0) + 1
-        
         f.write("## API Types Detected\n\n")
         for api_type, count in type_counts.items():
             f.write(f"- **{api_type}**: {count} API(s)\n")
         f.write("\n")
         
-        # Collect unique checks performed across all APIs
-        all_checks_performed = set()
-        all_manual_checks = set()
-        
-        for result in results:
-            all_checks_performed.update(result.checks_performed)
-            all_manual_checks.update(result.manual_checks_needed)
-        
-        if consistency_result:
-            all_checks_performed.update(consistency_result.checks_performed)
-        
-        if test_results:
-            for test_result in test_results:
-                all_checks_performed.update(test_result.checks_performed)
-        
-        # Add consolidated check sections to summary
-        if all_checks_performed:
-            f.write("## Automated Checks Performed\n\n")
-            for check in sorted(all_checks_performed):
-                f.write(f"- {check}\n")
-            f.write("\n")
-        
-        if all_manual_checks:
-            f.write("## Manual Review Required\n\n")
-            for check in sorted(all_manual_checks):
-                f.write(f"- {check}\n")
-            f.write("\n")
-        
-        # Enhanced validation features section
-        f.write("## Enhanced Validation Features\n\n")
-        f.write("This review includes comprehensive validation with enhanced subscription API classification:\n")
-        f.write("- **Explicit Subscription APIs**: APIs with `/subscriptions` endpoints for managing subscriptions as resources\n")
-        f.write("- **Implicit Subscription APIs**: APIs supporting notifications via `sink` parameter in resource creation\n")
-        f.write("- **Regular APIs**: Standard APIs with no subscription/notification functionality\n")
-        f.write("- **Type-Specific Validation**: Different validation rules applied based on detected API type\n")
-        f.write("- **Individual API Files**: OpenAPI compliance, schema validation, security checks\n")
-        f.write("- **Scope Naming Patterns**: CAMARA-compliant security scope validation\n")
-        f.write("- **Deep Filename Consistency**: Alignment between filename, title, and server URL\n")
-        f.write("- **Project Consistency**: Cross-file schema, license, and version consistency\n")
-        f.write("- **Test Alignment**: Validation of test definitions against API specifications\n")
-        f.write("- **Commonalities 0.6**: Updated error responses, work-in-progress detection\n\n")
-        
-        # Project-wide consistency results
-        if consistency_result and consistency_result.issues:
-            f.write("## Project-Wide Consistency Issues\n\n")
-            
-            critical_consistency = [i for i in consistency_result.issues if i.severity == Severity.CRITICAL]
-            medium_consistency = [i for i in consistency_result.issues if i.severity == Severity.MEDIUM]
-            low_consistency = [i for i in consistency_result.issues if i.severity == Severity.LOW]
-            
-            for severity, issues in [
-                ("🔴 Critical Cross-File Issues", critical_consistency),
-                ("🟡 Medium Cross-File Issues", medium_consistency),
-                ("🔵 Low Cross-File Issues", low_consistency)
-            ]:
-                if issues:
-                    f.write(f"### {severity}\n\n")
-                    for issue in issues:
-                        f.write(f"**{issue.category}**: {issue.description}\n")
-                        if issue.location:
-                            f.write(f"- **Location**: `{issue.location}`\n")
-                        if issue.fix_suggestion:
-                            f.write(f"- **Fix**: {issue.fix_suggestion}\n")
-                        f.write("\n")
-            f.write("---\n\n")
-        
-        # Test alignment results
-        if test_results:
-            f.write("## Test Alignment Results\n\n")
-            
-            for test_result in test_results:
-                api_name = Path(test_result.api_file).stem
-                f.write(f"### {api_name} Test Alignment\n\n")
-                
-                if test_result.test_files:
-                    f.write(f"**Test Files Found**: {len(test_result.test_files)}\n")
-                    for test_file in test_result.test_files:
-                        f.write(f"- `{Path(test_file).name}`\n")
-                    f.write("\n")
-                
-                if test_result.issues:
-                    critical_test = [i for i in test_result.issues if i.severity == Severity.CRITICAL]
-                    medium_test = [i for i in test_result.issues if i.severity == Severity.MEDIUM]
-                    low_test = [i for i in test_result.issues if i.severity == Severity.LOW]
-                    
-                    for severity, issues in [
-                        ("🔴 Critical Test Issues", critical_test),
-                        ("🟡 Medium Test Issues", medium_test),
-                        ("🔵 Low Test Issues", low_test)
-                    ]:
-                        if issues:
-                            f.write(f"#### {severity}\n\n")
-                            for issue in issues:
-                                f.write(f"**{issue.category}**: {issue.description}\n")
-                                if issue.location:
-                                    f.write(f"- **Location**: `{issue.location}`\n")
-                                if issue.fix_suggestion:
-                                    f.write(f"- **Fix**: {issue.fix_suggestion}\n")
-                                f.write("\n")
-                else:
-                    f.write("✅ **No test alignment issues found**\n\n")
-            
-            f.write("---\n\n")
-        
-        # Detailed results for each API
+        # 2. INDIVIDUAL API RESULTS
         f.write("## Individual API Results\n\n")
         
         for result in results:
@@ -1649,6 +1562,82 @@ def generate_report(results: List[ValidationResult], output_dir: str, repo_name:
                 f.write("✅ **No issues found**\n\n")
             
             f.write("---\n\n")
+        
+        # 3. TEST ALIGNMENT RESULTS
+        if test_results:
+            f.write("## Test Alignment Results\n\n")
+            
+            for test_result in test_results:
+                api_name = Path(test_result.api_file).stem
+                f.write(f"### {api_name} Test Alignment\n\n")
+                
+                if test_result.test_files:
+                    f.write(f"**Test Files Found**: {len(test_result.test_files)}\n")
+                    for test_file in test_result.test_files:
+                        f.write(f"- `{Path(test_file).name}`\n")
+                    f.write("\n")
+                
+                if test_result.issues:
+                    critical_test = [i for i in test_result.issues if i.severity == Severity.CRITICAL]
+                    medium_test = [i for i in test_result.issues if i.severity == Severity.MEDIUM]
+                    low_test = [i for i in test_result.issues if i.severity == Severity.LOW]
+                    
+                    for severity, issues in [
+                        ("🔴 Critical Test Issues", critical_test),
+                        ("🟡 Medium Test Issues", medium_test),
+                        ("🔵 Low Test Issues", low_test)
+                    ]:
+                        if issues:
+                            f.write(f"#### {severity}\n\n")
+                            for issue in issues:
+                                f.write(f"**{issue.category}**: {issue.description}\n")
+                                if issue.location:
+                                    f.write(f"- **Location**: `{issue.location}`\n")
+                                if issue.fix_suggestion:
+                                    f.write(f"- **Fix**: {issue.fix_suggestion}\n")
+                                f.write("\n")
+                else:
+                    f.write("✅ **No test alignment issues found**\n\n")
+            
+            f.write("---\n\n")
+        
+        # 4. PROJECT-WIDE CONSISTENCY ISSUES
+        if consistency_result and consistency_result.issues:
+            f.write("## Project-Wide Consistency Issues\n\n")
+            
+            critical_consistency = [i for i in consistency_result.issues if i.severity == Severity.CRITICAL]
+            medium_consistency = [i for i in consistency_result.issues if i.severity == Severity.MEDIUM]
+            low_consistency = [i for i in consistency_result.issues if i.severity == Severity.LOW]
+            
+            for severity, issues in [
+                ("🔴 Critical Cross-File Issues", critical_consistency),
+                ("🟡 Medium Cross-File Issues", medium_consistency),
+                ("🔵 Low Cross-File Issues", low_consistency)
+            ]:
+                if issues:
+                    f.write(f"### {severity}\n\n")
+                    for issue in issues:
+                        f.write(f"**{issue.category}**: {issue.description}\n")
+                        if issue.location:
+                            f.write(f"- **Location**: `{issue.location}`\n")
+                        if issue.fix_suggestion:
+                            f.write(f"- **Fix**: {issue.fix_suggestion}\n")
+                        f.write("\n")
+            f.write("---\n\n")
+        
+        # 5. AUTOMATED CHECKS PERFORMED
+        if all_checks_performed:
+            f.write("## Automated Checks Performed\n\n")
+            for check in sorted(all_checks_performed):
+                f.write(f"- {check}\n")
+            f.write("\n")
+        
+        # 6. MANUAL REVIEW REQUIRED
+        if all_manual_checks:
+            f.write("## Manual Review Required\n\n")
+            for check in sorted(all_manual_checks):
+                f.write(f"- {check}\n")
+            f.write("\n")
     
     # Generate summary for GitHub comment with 25-item limit
     with open(f"{output_dir}/summary.md", "w") as f:
