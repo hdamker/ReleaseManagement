@@ -1,23 +1,27 @@
 # .github/workflows/api-review-trigger.yml
 # 
-# CAMARA API Review Trigger Workflow (Dynamic Discovery)
+# CAMARA API Review Trigger Workflow
 # 
 # Purpose: Entry point for automated CAMARA API compliance reviews. Can be triggered by:
 #   - Issue comments starting with "/rc-api-review" (extracts PR URL from issue description)
 #   - Manual workflow dispatch with custom parameters
 # 
-# New Features:
-#   - Dynamic discovery of reusable workflow location
-#   - Support for deployment in any CAMARA repository
-#   - Results posted to current repository (not ReleaseManagement)
-#   - Fork-friendly with fallback to official tooling
+# Repository Configuration:
+#   - Repo owners can modify TOOLING_REPOSITORY below to use their own tooling
+#   - Default: camaraproject/tooling (official tooling)
+#   - Custom example: myuser/tooling (for testing custom tooling)
 # 
-# This workflow validates inputs, discovers tooling location, and calls the reusable review workflow.
+# This workflow validates inputs and calls the reusable review workflow.
 # 
 # Deploy this file to: ANY CAMARA repository .github/workflows/ directory
-# Results will be posted to: Issues in the SAME repository
+# Results will be posted to: Issues/PRs in the SAME repository
 
 name: 'CAMARA API Review Trigger'
+
+# 🔧 CONFIGURATION: Repo owners can modify this to use their own tooling repository
+env:
+  TOOLING_REPOSITORY: camaraproject/tooling  # Change this line for fork testing
+  TOOLING_VERSION: main                      # Change this line for version testing
 
 on:
   workflow_dispatch:
@@ -244,6 +248,7 @@ jobs:
           - Commonalities Version: 0.6
           - Repository: ${{ github.repository }}
           - Trigger: \`/$TRIGGER_COMMAND\`
+          - Tooling: ${{ env.TOOLING_REPOSITORY }}
           
           **Version Support:**
           - ✅ Commonalities 0.6: Fully supported
@@ -549,7 +554,7 @@ jobs:
           **Repository**: ${{ github.repository }}
           **Review Type**: ${{ needs.validate-input.outputs.review_type }}
           **Commonalities Version**: ${{ needs.validate-input.outputs.commonalities_version }}
-          **Tooling Used**: ${{ needs.validate-input.outputs.tooling_repo }}
+          **Tooling Used**: ${{ env.TOOLING_REPOSITORY }}
           **Workflow Run**: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
           
           ### Review Summary
@@ -639,7 +644,7 @@ jobs:
           **Repository**: ${{ github.repository }}
           **Review Type**: ${{ needs.validate-input.outputs.review_type }}
           **Commonalities Version**: ${{ needs.validate-input.outputs.commonalities_version }}
-          **Tooling Used**: ${{ needs.validate-input.outputs.tooling_repo }}
+          **Tooling Used**: ${{ env.TOOLING_REPOSITORY }}
           **Workflow Run**: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
           
           **Error Details:**
