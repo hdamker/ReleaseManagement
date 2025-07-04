@@ -500,8 +500,7 @@ jobs:
           
           RESULT_TARGET="${{ needs.validate-input.outputs.result_target }}"
           
-          # Get summary content from reusable workflow
-          SUMMARY_CONTENT="${{ needs.call-review-workflow.outputs.summary_content }}"
+          # Get review status and critical issues count from reusable workflow
           REVIEW_STATUS="${{ needs.call-review-workflow.outputs.review_status }}"
           CRITICAL_ISSUES="${{ needs.call-review-workflow.outputs.critical_issues_count }}"
           
@@ -517,12 +516,12 @@ jobs:
             TRIGGER_INFO="**Triggered by**: Manual workflow dispatch"
           fi
           
-          # Create results content
+          # Create results content header
           cat > results_content.md << 'EOF'
           ## ✅ API Review Complete
-
+          
           EOF
-
+          
           # Add dynamic content safely
           echo "${TRIGGER_INFO}" >> results_content.md
           echo "**Pull Request**: ${{ needs.validate-input.outputs.pull_request_url }}" >> results_content.md
@@ -533,7 +532,10 @@ jobs:
           echo "" >> results_content.md
           echo "### Review Summary" >> results_content.md
           echo "" >> results_content.md
-          echo "$SUMMARY_CONTENT" >> results_content.md
+          
+          # Write summary content safely using printf
+          printf '%s\n' '${{ needs.call-review-workflow.outputs.summary_content }}' >> results_content.md
+          
           echo "" >> results_content.md
           echo "### Next Steps" >> results_content.md
           echo "" >> results_content.md
@@ -585,7 +587,7 @@ jobs:
               -d "$COMMENT_JSON"
             
             echo "✅ Results posted to comment #${COMMENT_NUMBER}"
-          fi
+          fi 
 
       - name: Handle Workflow Failure
         if: needs.call-review-workflow.result == 'failure'
