@@ -472,6 +472,7 @@ jobs:
     # Example: myuser/tooling/.github/workflows/api-review-reusable.yml@main
     uses: hdamker/tooling/.github/workflows/api-review-reusable.yml@main
     with:
+      tooling_repository: "hdamker/tooling"  # ← Adhoc fix, as uses line is anyway hardcoded for security reasons. 
       repo_owner: ${{ needs.validate-input.outputs.repo_owner }}
       repo_name: ${{ needs.validate-input.outputs.repo_name }}
       pr_number: ${{ needs.validate-input.outputs.pr_number }}
