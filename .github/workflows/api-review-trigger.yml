@@ -518,23 +518,25 @@ jobs:
           fi
           
           # Create results content
-          cat > results_content.md << EOF
+          cat > results_content.md << 'EOF'
           ## ✅ API Review Complete
-          
-          ${TRIGGER_INFO}
-          **Pull Request**: ${{ needs.validate-input.outputs.pull_request_url }}
-          **Repository**: ${{ github.repository }}
-          **Review Type**: ${{ needs.validate-input.outputs.review_type }}
-          **Commonalities Version**: ${{ needs.validate-input.outputs.commonalities_version }}
-          **Workflow Run**: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          
-          ### Review Summary
-          
-          $SUMMARY_CONTENT
-          
-          ### Next Steps
-          
+
           EOF
+
+          # Add dynamic content safely
+          echo "${TRIGGER_INFO}" >> results_content.md
+          echo "**Pull Request**: ${{ needs.validate-input.outputs.pull_request_url }}" >> results_content.md
+          echo "**Repository**: ${{ github.repository }}" >> results_content.md
+          echo "**Review Type**: ${{ needs.validate-input.outputs.review_type }}" >> results_content.md
+          echo "**Commonalities Version**: ${{ needs.validate-input.outputs.commonalities_version }}" >> results_content.md
+          echo "**Workflow Run**: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> results_content.md
+          echo "" >> results_content.md
+          echo "### Review Summary" >> results_content.md
+          echo "" >> results_content.md
+          echo "$SUMMARY_CONTENT" >> results_content.md
+          echo "" >> results_content.md
+          echo "### Next Steps" >> results_content.md
+          echo "" >> results_content.md
           
           # Add status-specific guidance
           if [[ "$REVIEW_STATUS" == "success" ]]; then
