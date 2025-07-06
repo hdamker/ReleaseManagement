@@ -52,8 +52,7 @@ jobs:
       trigger_command: ${{ steps.check.outputs.trigger_command }}
       comment_context: ${{ steps.check.outputs.comment_context }}
       pull_request_url: ${{ steps.extract.outputs.pull_request_url }}
-      issue_number: ${{ steps.extract.outputs.issue_number }}
-      pr_number: ${{ steps.extract.outputs.pr_number }}
+      comment_target_number: ${{ steps.extract.outputs.comment_target_number }}
       review_type: ${{ steps.extract.outputs.review_type }}
       commonalities_version: ${{ steps.extract.outputs.commonalities_version }}
       is_main_branch: ${{ steps.extract.outputs.is_main_branch }}
@@ -113,6 +112,9 @@ jobs:
           echo "Command: $TRIGGER_COMMAND"
           echo "Context: $COMMENT_CONTEXT"
           
+          # Set comment target number (same for both issues and PRs)
+          echo "comment_target_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          
           if [[ "$COMMENT_CONTEXT" == "issue" ]]; then
             echo "📋 Processing issue comment..."
             
@@ -128,8 +130,6 @@ jobs:
               
               echo "✅ Targeting main branch: $DEFAULT_BRANCH"
               echo "pull_request_url=$MAIN_BRANCH_URL" >> $GITHUB_OUTPUT
-              echo "issue_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
-              echo "pr_number=" >> $GITHUB_OUTPUT
               echo "target_branch=$DEFAULT_BRANCH" >> $GITHUB_OUTPUT
               echo "target_repo=${{ github.repository }}" >> $GITHUB_OUTPUT
               echo "is_main_branch=true" >> $GITHUB_OUTPUT
@@ -175,8 +175,6 @@ jobs:
               echo "  Cleaned URL: '$PR_URL'"
               
               echo "pull_request_url=$PR_URL" >> $GITHUB_OUTPUT
-              echo "issue_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
-              echo "pr_number=" >> $GITHUB_OUTPUT
               echo "target_branch=" >> $GITHUB_OUTPUT
               echo "target_repo=" >> $GITHUB_OUTPUT
               echo "is_main_branch=false" >> $GITHUB_OUTPUT
@@ -186,13 +184,10 @@ jobs:
             echo "🔀 Processing pull request comment..."
             
             # For PR comments, always use the current pull request
-            PR_NUMBER="${{ github.event.issue.number }}"
             PR_URL="${{ github.event.issue.pull_request.html_url }}"
             
             echo "✅ Using current PR: $PR_URL"
             echo "pull_request_url=$PR_URL" >> $GITHUB_OUTPUT
-            echo "issue_number=" >> $GITHUB_OUTPUT
-            echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
             echo "target_branch=" >> $GITHUB_OUTPUT
             echo "target_repo=" >> $GITHUB_OUTPUT
             echo "is_main_branch=false" >> $GITHUB_OUTPUT
@@ -215,14 +210,10 @@ jobs:
           echo "  Commonalities Version: 0.6"
           echo "  Target: ${{ steps.extract.outputs.pull_request_url }}"
           echo "  Context: $COMMENT_CONTEXT"
+          echo "  Comment Target: #${{ github.event.issue.number }}"
           
-          if [[ "$COMMENT_CONTEXT" == "issue" ]]; then
-            echo "  Issue Number: ${{ github.event.issue.number }}"
-            if [[ "${{ steps.extract.outputs.is_main_branch }}" == "true" ]]; then
-              echo "  Special: Targeting main branch for WIP review"
-            fi
-          else
-            echo "  PR Number: $PR_NUMBER"
+          if [[ "$COMMENT_CONTEXT" == "issue" && "${{ steps.extract.outputs.is_main_branch }}" == "true" ]]; then
+            echo "  Special: Targeting main branch for WIP review"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -267,26 +258,16 @@ jobs:
           Results will be posted here when the review completes.
           EOF
           
-          # Post comment to appropriate location
+          # Post acknowledgment comment
           COMMENT_JSON=$(jq -n --rawfile body acknowledge_comment.md '{body: $body}')
           
-          if [[ "$COMMENT_CONTEXT" == "issue" ]]; then
-            # Post to issue
-            curl -X POST \
-              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments" \
-              -d "$COMMENT_JSON"
-            echo "✅ Acknowledgment posted to issue #${{ github.event.issue.number }}"
-          else
-            # Post to pull request
-            curl -X POST \
-              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ steps.extract.outputs.pr_number }}/comments" \
-              -d "$COMMENT_JSON"
-            echo "✅ Acknowledgment posted to pull request #${{ steps.extract.outputs.pr_number }}"
-          fi
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ steps.extract.outputs.comment_target_number }}/comments" \
+            -d "$COMMENT_JSON"
+          
+          echo "✅ Acknowledgment posted to #${{ steps.extract.outputs.comment_target_number }}"
 
   validate-input:
     runs-on: ubuntu-latest
@@ -295,21 +276,16 @@ jobs:
     outputs:
       repo_owner: ${{ steps.parse.outputs.repo_owner }}
       repo_name: ${{ steps.parse.outputs.repo_name }}
-      pr_number: ${{ steps.parse.outputs.pr_number }}
+      issue_number: ${{ steps.determine-inputs.outputs.comment_target_number }}
       pull_request_url: ${{ steps.determine-inputs.outputs.pull_request_url }}
-      issue_number: ${{ steps.determine-inputs.outputs.issue_number }}
-      pr_number_for_comment: ${{ steps.determine-inputs.outputs.pr_number_for_comment }}
+      comment_target_number: ${{ steps.determine-inputs.outputs.comment_target_number }}
       review_type: ${{ steps.determine-inputs.outputs.review_type }}
       commonalities_version: ${{ steps.determine-inputs.outputs.commonalities_version }}
-      result_target: ${{ steps.determine-inputs.outputs.result_target }}
       is_main_branch: ${{ steps.determine-inputs.outputs.is_main_branch }}
       target_branch: ${{ steps.determine-inputs.outputs.target_branch }}
       target_repo: ${{ steps.determine-inputs.outputs.target_repo }}
       final_pr_head_sha: ${{ steps.final-outputs.outputs.final_pr_head_sha }}
-      final_pr_head_ref: ${{ steps.final-outputs.outputs.final_pr_head_ref }}
       final_pr_head_repo: ${{ steps.final-outputs.outputs.final_pr_head_repo }}
-      final_pr_base_ref: ${{ steps.final-outputs.outputs.final_pr_base_ref }}
-      final_pr_base_repo: ${{ steps.final-outputs.outputs.final_pr_base_repo }}
     steps:
       - name: Determine Input Source
         id: determine-inputs
@@ -317,22 +293,18 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "📝 Using inputs from manual dispatch"
             echo "pull_request_url=${{ github.event.inputs.pull_request_url }}" >> $GITHUB_OUTPUT
-            echo "issue_number=" >> $GITHUB_OUTPUT
-            echo "pr_number_for_comment=" >> $GITHUB_OUTPUT
+            echo "comment_target_number=0" >> $GITHUB_OUTPUT
             echo "review_type=${{ github.event.inputs.review_type }}" >> $GITHUB_OUTPUT
             echo "commonalities_version=${{ github.event.inputs.commonalities_version }}" >> $GITHUB_OUTPUT
-            echo "result_target=manual" >> $GITHUB_OUTPUT
             echo "is_main_branch=false" >> $GITHUB_OUTPUT
             echo "target_branch=" >> $GITHUB_OUTPUT
             echo "target_repo=" >> $GITHUB_OUTPUT
           else
             echo "📝 Using inputs from comment trigger"
             echo "pull_request_url=${{ needs.check-comment-trigger.outputs.pull_request_url }}" >> $GITHUB_OUTPUT
-            echo "issue_number=${{ needs.check-comment-trigger.outputs.issue_number }}" >> $GITHUB_OUTPUT
-            echo "pr_number_for_comment=${{ needs.check-comment-trigger.outputs.pr_number }}" >> $GITHUB_OUTPUT
+            echo "comment_target_number=${{ needs.check-comment-trigger.outputs.comment_target_number }}" >> $GITHUB_OUTPUT
             echo "review_type=${{ needs.check-comment-trigger.outputs.review_type }}" >> $GITHUB_OUTPUT
             echo "commonalities_version=${{ needs.check-comment-trigger.outputs.commonalities_version }}" >> $GITHUB_OUTPUT
-            echo "result_target=comment" >> $GITHUB_OUTPUT
             echo "is_main_branch=${{ needs.check-comment-trigger.outputs.is_main_branch }}" >> $GITHUB_OUTPUT
             echo "target_branch=${{ needs.check-comment-trigger.outputs.target_branch }}" >> $GITHUB_OUTPUT
             echo "target_repo=${{ needs.check-comment-trigger.outputs.target_repo }}" >> $GITHUB_OUTPUT
@@ -367,12 +339,8 @@ jobs:
             
             echo "repo_owner=$REPO_OWNER" >> $GITHUB_OUTPUT
             echo "repo_name=$REPO_NAME" >> $GITHUB_OUTPUT
-            echo "pr_number=0" >> $GITHUB_OUTPUT
             echo "pr_head_sha=$LATEST_SHA" >> $GITHUB_OUTPUT
-            echo "pr_head_ref=$DEFAULT_BRANCH" >> $GITHUB_OUTPUT
             echo "pr_head_repo=${{ github.repository }}" >> $GITHUB_OUTPUT
-            echo "pr_base_ref=$DEFAULT_BRANCH" >> $GITHUB_OUTPUT
-            echo "pr_base_repo=${{ github.repository }}" >> $GITHUB_OUTPUT
             
           else
             echo "🔗 Processing pull request URL"
@@ -381,16 +349,14 @@ jobs:
             if [[ "$PR_URL" =~ ^https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+)$ ]]; then
               REPO_OWNER="${BASH_REMATCH[1]}"
               REPO_NAME="${BASH_REMATCH[2]}"
-              PR_NUMBER="${BASH_REMATCH[3]}"
               
               echo "✅ Successfully parsed PR URL:"
               echo "  Owner: $REPO_OWNER"
               echo "  Repository: $REPO_NAME"
-              echo "  PR Number: $PR_NUMBER"
+              echo "  PR Number: ${BASH_REMATCH[3]}"
               
               echo "repo_owner=$REPO_OWNER" >> $GITHUB_OUTPUT
               echo "repo_name=$REPO_NAME" >> $GITHUB_OUTPUT
-              echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
             else
               echo "❌ Invalid PR URL format: $PR_URL"
               echo "Expected format: https://github.com/[owner]/[repo]/pull/[number]"
@@ -406,28 +372,30 @@ jobs:
         run: |
           REPO_OWNER="${{ steps.parse.outputs.repo_owner }}"
           REPO_NAME="${{ steps.parse.outputs.repo_name }}"
-          PR_NUMBER="${{ steps.parse.outputs.pr_number }}"
+          PR_URL="${{ steps.determine-inputs.outputs.pull_request_url }}"
           
-          echo "🔍 Fetching PR details for $REPO_OWNER/$REPO_NAME#$PR_NUMBER"
+          # Extract PR number from URL for API call
+          if [[ "$PR_URL" =~ pull/([0-9]+)$ ]]; then
+            PR_NUMBER="${BASH_REMATCH[1]}"
+          else
+            echo "❌ Could not extract PR number from URL: $PR_URL"
+            exit 1
+          fi
+          
+          echo "🔍 Fetching PR details for $PR_URL"
           
           # Get PR details using GitHub API
           PR_DATA=$(gh api repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER)
           
           # Extract required information
           PR_HEAD_SHA=$(echo "$PR_DATA" | jq -r '.head.sha')
-          PR_HEAD_REF=$(echo "$PR_DATA" | jq -r '.head.ref')
           PR_HEAD_REPO=$(echo "$PR_DATA" | jq -r '.head.repo.full_name')
-          PR_BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref')
-          PR_BASE_REPO=$(echo "$PR_DATA" | jq -r '.base.repo.full_name')
           PR_STATE=$(echo "$PR_DATA" | jq -r '.state')
           
           echo "✅ PR Details:"
           echo "  State: $PR_STATE"
           echo "  Head SHA: $PR_HEAD_SHA"
-          echo "  Head Ref: $PR_HEAD_REF"
           echo "  Head Repo: $PR_HEAD_REPO"
-          echo "  Base Ref: $PR_BASE_REF"
-          echo "  Base Repo: $PR_BASE_REPO"
           
           # Validate PR state
           if [[ "$PR_STATE" != "open" ]]; then
@@ -436,10 +404,7 @@ jobs:
           fi
           
           echo "pr_head_sha=$PR_HEAD_SHA" >> $GITHUB_OUTPUT
-          echo "pr_head_ref=$PR_HEAD_REF" >> $GITHUB_OUTPUT
           echo "pr_head_repo=$PR_HEAD_REPO" >> $GITHUB_OUTPUT
-          echo "pr_base_ref=$PR_BASE_REF" >> $GITHUB_OUTPUT
-          echo "pr_base_repo=$PR_BASE_REPO" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -450,17 +415,11 @@ jobs:
           if [[ "${{ steps.determine-inputs.outputs.is_main_branch }}" == "true" ]]; then
             echo "Using main branch details"
             echo "final_pr_head_sha=${{ steps.parse.outputs.pr_head_sha }}" >> $GITHUB_OUTPUT
-            echo "final_pr_head_ref=${{ steps.parse.outputs.pr_head_ref }}" >> $GITHUB_OUTPUT
             echo "final_pr_head_repo=${{ steps.parse.outputs.pr_head_repo }}" >> $GITHUB_OUTPUT
-            echo "final_pr_base_ref=${{ steps.parse.outputs.pr_base_ref }}" >> $GITHUB_OUTPUT
-            echo "final_pr_base_repo=${{ steps.parse.outputs.pr_base_repo }}" >> $GITHUB_OUTPUT
           else
             echo "Using PR details"
             echo "final_pr_head_sha=${{ steps.pr_details.outputs.pr_head_sha }}" >> $GITHUB_OUTPUT
-            echo "final_pr_head_ref=${{ steps.pr_details.outputs.pr_head_ref }}" >> $GITHUB_OUTPUT
             echo "final_pr_head_repo=${{ steps.pr_details.outputs.pr_head_repo }}" >> $GITHUB_OUTPUT
-            echo "final_pr_base_ref=${{ steps.pr_details.outputs.pr_base_ref }}" >> $GITHUB_OUTPUT
-            echo "final_pr_base_repo=${{ steps.pr_details.outputs.pr_base_repo }}" >> $GITHUB_OUTPUT
           fi
 
   call-review-workflow:
@@ -470,20 +429,14 @@ jobs:
     # Example: myuser/tooling/.github/workflows/api-review-reusable.yml@main
     uses: hdamker/tooling/.github/workflows/api-review-reusable.yml@main
     with:
-      tooling_repository: "hdamker/tooling"  # ← Adhoc fix, as uses line is anyway hardcoded for security reasons. 
+      tooling_repository: "hdamker/tooling"  # ← Adhoc fix, as uses line is anyway hardcoded for security reasons.
       repo_owner: ${{ needs.validate-input.outputs.repo_owner }}
       repo_name: ${{ needs.validate-input.outputs.repo_name }}
-      pr_number: ${{ needs.validate-input.outputs.pr_number }}
+      issue_number: ${{ needs.validate-input.outputs.issue_number }}
       pr_head_sha: ${{ needs.validate-input.outputs.final_pr_head_sha }}
-      pr_head_ref: ${{ needs.validate-input.outputs.final_pr_head_ref }}
       pr_head_repo: ${{ needs.validate-input.outputs.final_pr_head_repo }}
-      pr_base_ref: ${{ needs.validate-input.outputs.final_pr_base_ref }}
-      pr_base_repo: ${{ needs.validate-input.outputs.final_pr_base_repo }}
       review_type: ${{ needs.validate-input.outputs.review_type }}
       commonalities_version: ${{ needs.validate-input.outputs.commonalities_version }}
-      issue_number: ${{ needs.validate-input.outputs.issue_number }}
-      pr_number_for_comment: ${{ needs.validate-input.outputs.pr_number_for_comment }}
-      result_target: ${{ needs.validate-input.outputs.result_target }}
     secrets: inherit
 
   post-results:
@@ -495,8 +448,6 @@ jobs:
         if: needs.call-review-workflow.result == 'success'
         run: |
           echo "📊 Posting review results..."
-          
-          RESULT_TARGET="${{ needs.validate-input.outputs.result_target }}"
           
           # Get review status and critical issues count from reusable workflow
           REVIEW_STATUS="${{ needs.call-review-workflow.outputs.review_status }}"
@@ -555,8 +506,8 @@ jobs:
             echo "❓ **Review completed with warnings** - Please review the detailed report." >> results_content.md
           fi
           
-          # Post results based on trigger type
-          if [[ "$RESULT_TARGET" == "manual" ]]; then
+          # Determine result target based on trigger type
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "📝 Posting results to workflow summary"
             
             # Post to workflow summary
@@ -566,14 +517,9 @@ jobs:
           else
             echo "📝 Posting results to comment"
             
-            # Determine where to post comment
-            if [[ -n "${{ needs.validate-input.outputs.issue_number }}" ]]; then
-              COMMENT_NUMBER="${{ needs.validate-input.outputs.issue_number }}"
-              echo "Posting to issue #$COMMENT_NUMBER"
-            else
-              COMMENT_NUMBER="${{ needs.validate-input.outputs.pr_number_for_comment }}"
-              echo "Posting to pull request #$COMMENT_NUMBER"
-            fi
+            # Simplified comment posting - use single target number
+            COMMENT_TARGET_NUMBER="${{ needs.validate-input.outputs.comment_target_number }}"
+            echo "Posting to #$COMMENT_TARGET_NUMBER"
             
             # Post comment (works for both issues and PRs)
             COMMENT_JSON=$(jq -n --rawfile body results_content.md '{body: $body}')
@@ -581,18 +527,16 @@ jobs:
             curl -X POST \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
-              "${{ github.api_url }}/repos/${{ github.repository }}/issues/${COMMENT_NUMBER}/comments" \
+              "${{ github.api_url }}/repos/${{ github.repository }}/issues/${COMMENT_TARGET_NUMBER}/comments" \
               -d "$COMMENT_JSON"
             
-            echo "✅ Results posted to comment #${COMMENT_NUMBER}"
+            echo "✅ Results posted to #${COMMENT_TARGET_NUMBER}"
           fi 
 
       - name: Handle Workflow Failure
         if: needs.call-review-workflow.result == 'failure'
         run: |
           echo "❌ API Review workflow failed"
-          
-          RESULT_TARGET="${{ needs.validate-input.outputs.result_target }}"
           
           # Determine trigger information
           if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
@@ -633,8 +577,8 @@ jobs:
           Please check the workflow logs and retry the review.
           EOF
           
-          # Post failure based on trigger type
-          if [[ "$RESULT_TARGET" == "manual" ]]; then
+          # Determine result target based on trigger type
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "📝 Posting failure to workflow summary"
             
             # Post to workflow summary
@@ -644,14 +588,9 @@ jobs:
           else
             echo "📝 Posting failure to comment"
             
-            # Determine where to post comment
-            if [[ -n "${{ needs.validate-input.outputs.issue_number }}" ]]; then
-              COMMENT_NUMBER="${{ needs.validate-input.outputs.issue_number }}"
-              echo "Posting to issue #$COMMENT_NUMBER"
-            else
-              COMMENT_NUMBER="${{ needs.validate-input.outputs.pr_number_for_comment }}"
-              echo "Posting to pull request #$COMMENT_NUMBER"
-            fi
+            # Simplified comment posting - use single target number
+            COMMENT_TARGET_NUMBER="${{ needs.validate-input.outputs.comment_target_number }}"
+            echo "Posting to #$COMMENT_TARGET_NUMBER"
             
             # Post comment (works for both issues and PRs)
             COMMENT_JSON=$(jq -n --rawfile body failure_content.md '{body: $body}')
@@ -659,8 +598,8 @@ jobs:
             curl -X POST \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
-              "${{ github.api_url }}/repos/${{ github.repository }}/issues/${COMMENT_NUMBER}/comments" \
+              "${{ github.api_url }}/repos/${{ github.repository }}/issues/${COMMENT_TARGET_NUMBER}/comments" \
               -d "$COMMENT_JSON"
             
-            echo "✅ Failure notification posted to comment #${COMMENT_NUMBER}"
+            echo "✅ Failure notification posted to #${COMMENT_TARGET_NUMBER}"
           fi
