@@ -4,17 +4,19 @@
 # 
 # Purpose: Entry point for automated CAMARA API compliance reviews. Can be triggered by:
 #   - Issue comments starting with "/rc-api-review" (extracts PR URL from issue description)
-#   - Issue comments starting with "/wip-api-review" (reviews main branch or PR head)
+#   - Pull request comments starting with "/rc-api-review" (reviews PR head)
+#   - Issue or pull request comments starting with "/wip-api-review" (reviews main branch or PR head)
 #   - Manual workflow dispatch with custom parameters
 # 
 # Repository Configuration:
-#   - Repo owners can modify the "uses" field below to use their own tooling
+#   - Repo owners can modify the "uses" field below to test with a fork of tooling
 #   - Default: camaraproject/tooling (official tooling)
-#   - Custom example: myuser/tooling (for testing custom tooling)
+#   - Custom example: myuser/tooling (for testing changes to tooling)
 # 
 # This workflow validates inputs and calls the reusable review workflow.
 # 
-# Deploy this file to: ANY CAMARA repository .github/workflows/ directory
+# Deploy this file to: ANY CAMARA API repository .github/workflows/ directory 
+# or to ReleaseManagement (for use in release review issues)
 # Results will be posted to: Issues/PRs in the SAME repository
 
 name: 'CAMARA API Review Trigger'
@@ -61,6 +63,8 @@ jobs:
     steps:
       - name: Check Comment Trigger
         id: check
+        env:
+          COMMENT_BODY: ${{ toJSON(github.event.comment.body) }}
         run: |
           # Check if this is a comment event
           if [[ "${{ github.event_name }}" != "issue_comment" ]]; then
@@ -79,7 +83,7 @@ jobs:
           fi
           
           # Use jq to safely extract comment body and get first line only
-          COMMENT_FIRST_LINE=$(echo '${{ toJSON(github.event.comment.body) }}' | jq -r '. | split("\n")[0]')
+          COMMENT_FIRST_LINE=$(echo "$COMMENT_BODY" | jq -r '. | split("\n")[0]')
           
           echo "💬 Comment first line: '$COMMENT_FIRST_LINE'"
           
@@ -429,7 +433,7 @@ jobs:
     # Example: myuser/tooling/.github/workflows/api-review-reusable.yml@main
     uses: hdamker/tooling/.github/workflows/api-review-reusable.yml@main
     with:
-      tooling_repository: "hdamker/tooling"  # ← Adhoc fix, as uses line is anyway hardcoded for security reasons.
+      tooling_repository: "hdamker/tooling"  # ← repository where the validator script will be expected
       repo_owner: ${{ needs.validate-input.outputs.repo_owner }}
       repo_name: ${{ needs.validate-input.outputs.repo_name }}
       issue_number: ${{ needs.validate-input.outputs.issue_number }}
