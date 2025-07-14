@@ -489,7 +489,7 @@ jobs:
     if: always() && needs.validate-input.result == 'success'
     # 🔧 CONFIGURATION: Repo owners can modify this line to use their own tooling repository
     # Example: myuser/tooling/.github/workflows/api-review-reusable.yml@main
-    uses: damker/tooling/.github/workflows/api-review-reusable.yml@phase0-workflow-setup
+    uses: hdamker/tooling/.github/workflows/api-review-reusable.yml@phase0-workflow-setup
     with:
       tooling_repository: "camaraproject/tooling"  # ← repository where the validator script will be expected
       tooling_branch: "phase0-workflow-setup" # <- branch within the tooling repository
