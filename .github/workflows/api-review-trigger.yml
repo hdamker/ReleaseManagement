@@ -491,7 +491,7 @@ jobs:
     # Example: myuser/tooling/.github/workflows/api-review-reusable.yml@main
     uses: hdamker/tooling/.github/workflows/api-review-reusable.yml@phase0-workflow-setup
     with:
-      tooling_repository: "camaraproject/tooling"  # ← repository where the validator script will be expected
+      tooling_repository: "hdamker/tooling"  # ← repository where the validator script will be expected
       tooling_branch: "phase0-workflow-setup" # <- branch within the tooling repository
       repo_owner: ${{ needs.validate-input.outputs.repo_owner }}
       repo_name: ${{ needs.validate-input.outputs.repo_name }}
