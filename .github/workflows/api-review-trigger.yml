@@ -43,6 +43,15 @@ on:
         type: choice
         options:
           - '0.6'
+      validator_choice:
+        description: 'Choose which validator to use (Automatic uses rollout logic)'
+        required: false
+        default: 'Automatic'
+        type: choice
+        options:
+          - 'Automatic'
+          - 'Legacy'
+          - 'Modular'
   issue_comment:
     types: [created]
 
@@ -255,10 +264,6 @@ jobs:
           - Repository: ${{ github.repository }}
           - Trigger: \`/$TRIGGER_COMMAND\`
           
-          **Version Support:**
-          - ✅ Commonalities 0.6: Fully supported
-          - ⏳ Commonalities 0.7+: Coming soon
-          
           Results will be posted here when the review completes.
           EOF
           
@@ -426,14 +431,68 @@ jobs:
             echo "final_pr_head_repo=${{ steps.pr_details.outputs.pr_head_repo }}" >> $GITHUB_OUTPUT
           fi
 
-  call-review-workflow:
+  determine-validator:
     needs: validate-input
+    if: always() && needs.validate-input.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      use_legacy: ${{ steps.determine.outputs.use_legacy }}
+    steps:
+      - name: Determine Validator Type
+        id: determine
+        run: |
+          # Extract repository name from repo_name output
+          REPO_NAME="${{ needs.validate-input.outputs.repo_name }}"
+          echo "📦 Repository: $REPO_NAME"
+          
+          # Check if manual override is requested (only available in workflow_dispatch)
+          VALIDATOR_CHOICE="${{ github.event.inputs.validator_choice || 'Automatic' }}"
+          echo "🎛️ Validator choice: $VALIDATOR_CHOICE"
+          
+          # Determine which validator to use
+          if [[ "$VALIDATOR_CHOICE" == "Legacy" ]]; then
+            # Manual override to legacy
+            echo "use_legacy=true" >> $GITHUB_OUTPUT
+            echo "🔒 Manual override: Using legacy validator"
+          elif [[ "$VALIDATOR_CHOICE" == "Modular" ]]; then
+            # Manual override to modular
+            echo "use_legacy=false" >> $GITHUB_OUTPUT
+            echo "🔓 Manual override: Using modular validator"
+          else
+            # Automatic mode - use rollout logic
+            echo "🤖 Automatic mode: Using rollout logic"
+            
+            # Phase 4: Selective rollout - test repositories
+            # Initially, we'll use legacy validator for all repos
+            # As we test and gain confidence, we can add repos to use the new validator
+            TEST_REPOS=""  # Start with empty list
+            # TEST_REPOS="DeviceLocation QualityOnDemand"  # Example for Phase 4
+            
+            if [[ " $TEST_REPOS " =~ " $REPO_NAME " ]]; then
+              echo "use_legacy=false" >> $GITHUB_OUTPUT
+              echo "🆕 Using new modular validator for test repository: $REPO_NAME"
+            else
+              echo "use_legacy=true" >> $GITHUB_OUTPUT
+              echo "📜 Using legacy validator for repository: $REPO_NAME"
+            fi
+          fi
+          
+          # Log final decision
+          if [[ "$(grep "use_legacy=true" $GITHUB_OUTPUT 2>/dev/null)" ]]; then
+            echo "📊 Final decision: Legacy validator will be used"
+          else
+            echo "📊 Final decision: Modular validator will be used"
+          fi
+
+  call-review-workflow:
+    needs: [validate-input, determine-validator]
     if: always() && needs.validate-input.result == 'success'
     # 🔧 CONFIGURATION: Repo owners can modify this line to use their own tooling repository
     # Example: myuser/tooling/.github/workflows/api-review-reusable.yml@main
-    uses: camaraproject/tooling/.github/workflows/api-review-reusable.yml@main
+    uses: hdamker/tooling/.github/workflows/api-review-reusable.yml@phase0-workflow-setup
     with:
-      tooling_repository: "camaraproject/tooling"  # ← repository where the validator script will be expected
+      tooling_repository: "hdamker/tooling"  # ← repository where the validator script will be expected
+      tooling_branch: "phase0-workflow-setup" # <- branch within the tooling repository
       repo_owner: ${{ needs.validate-input.outputs.repo_owner }}
       repo_name: ${{ needs.validate-input.outputs.repo_name }}
       issue_number: ${{ needs.validate-input.outputs.issue_number }}
@@ -441,6 +500,7 @@ jobs:
       pr_head_repo: ${{ needs.validate-input.outputs.final_pr_head_repo }}
       review_type: ${{ needs.validate-input.outputs.review_type }}
       commonalities_version: ${{ needs.validate-input.outputs.commonalities_version }}
+      legacy_validator: ${{ needs.determine-validator.outputs.use_legacy == 'true' }}
     secrets: inherit
 
   post-results:
@@ -467,6 +527,11 @@ jobs:
             fi
           else
             TRIGGER_INFO="**Triggered by**: Manual workflow dispatch"
+          fi
+
+          # Add validator information for manual dispatch
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.validator_choice }}" ]]; then
+            echo "**Validator**: ${{ github.event.inputs.validator_choice }}" >> results_content.md
           fi
           
           # Create results content header
