@@ -46,7 +46,7 @@ Repositories can participate in releases via two tracks:
 The release process follows a structured 5-step workflow driven by metadata.
 
 ```mermaid
-graph TD
+graph LR
     A[Dev on main<br>(Version: wip)] -->|Update Plan| B(release-plan.yaml)
     B -->|Trigger Release| C[Create Release Branch]
     C -->|Auto-Generate| D(release-metadata.yaml)
