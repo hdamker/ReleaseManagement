@@ -47,12 +47,12 @@ The release process follows a structured 5-step workflow driven by metadata.
 
 ```mermaid
 graph LR
-    A[Dev on main<br>(Version: wip)] -->|Update Plan| B(release-plan.yaml)
+    A["Dev on main<br>(Version: wip)"] -->|Update Plan| B(release-plan.yaml)
     B -->|Trigger Release| C[Create Release Branch]
     C -->|Auto-Generate| D(release-metadata.yaml)
     D -->|Review PR| E[Release Branch Review]
     E -->|Approve| F[Tag & Publish rX.Y]
-    F -->|Post-Release| G[Update main<br>(Changelog only)]
+    F -->|Post-Release| G["Update main<br>(Changelog only)"]
 ```
 
 ### Step 1: Continuous Development & Planning (on `main`)
