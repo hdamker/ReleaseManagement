@@ -16,10 +16,10 @@ Repository to describe, develop, document and test the Release Management proces
 
 ## Release Process Information
 
-**The Release Management documents describes the processes and the repository provides the artifacts for use by API Sub projects to release an API version.**
+**The Release Management documents describe the processes and the repository provides the artifacts for use by API Sub projects to release an API version.**
 
-It contains the Release Management released documents and assests in the **documentation** folder:
-   - [API_Release_Guidelines.md](/documentation/API_Release_Guidelines.md) - An extract of the API release management process from the CAMARA wiki.
+It contains the Release Management released documents and assets in the **documentation** folder:
+   - [**CAMARA Release Process**](/documentation/Release_Process.md) - **Start Here**. The consolidated guide for the new release workflow, covering automation, metadata, and versioning.
    - [API-Readiness-Checklist.md](/documentation/API-Readiness-Checklist.md) - The checklist to ensure release readiness of the API according to its version (alpha, release-candidate, public).
    - [CHANGELOG_TEMPLATE.md](/documentation/CHANGELOG_TEMPLATE.md) - The template for creating CHANGELOG history of an API repository.
 
@@ -33,6 +33,7 @@ The [CHANGELOG.md](/CHANGELOG.md) file describes the differences between release
 ## Release Management Wiki
 
 Beyond the above reference release management information in GitHub, more information on the release process is available on the wiki.
+**Note**: Some wiki pages regarding manual release tracking are being superseded by the metadata-driven process described in the [Release Process](/documentation/Release_Process.md) document.
 
 * **Meta-releases of CAMARA**
 
@@ -40,8 +41,7 @@ Beyond the above reference release management information in GitHub, more inform
   * [Meta-release Process](https://lf-camaraproject.atlassian.net/wiki/x/Zwne)
 
 * **API release management**
-  * [API Release Process](https://lf-camaraproject.atlassian.net/wiki/x/jine)
-  * [API Release Tracking Process](https://lf-camaraproject.atlassian.net/wiki/x/ZhHe)
+  * [API Release Process](https://lf-camaraproject.atlassian.net/wiki/x/jine) (Legacy reference)
   * [More on API Readiness Checklist](https://lf-camaraproject.atlassian.net/wiki/spaces/CAM/pages/14559630/API+Release+Process#API-readiness-checklist)
   * [More on API Versioning](https://lf-camaraproject.atlassian.net/wiki/x/3yLe)
 
