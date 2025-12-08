@@ -161,5 +161,6 @@ CAMARA follows strictly [Semantic Versioning 2.0.0](https://semver.org/).
 - **Automation Rule**: The CI ensures the `servers.url` in your OpenAPI file matches this strictly.
 
 ## 7. Supporting Documents
+- [Release Planning Cookbook](Release_Planning_Cookbook.md): Common recipes for configuring `release-plan.yaml`.
 - [API Readiness Checklist](API-Readiness-Checklist.md): List of requirements for different readiness levels.
 - [Commonalities Versioning](https://github.com/camaraproject/Commonalities/blob/main/documentation/CAMARA-API-Design-Guide.md#7-versioning): Detailed versioning rules.
