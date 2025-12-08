@@ -108,7 +108,8 @@ If substantive issues are found during review, they must be fixed on `main`, NOT
 
 ## 5. Metadata Reference
 
-The process relies on two key files:
+The process relies on two key files.
+> **Note**: The YAML blocks below are **examples**. For detailed recipes, see the [Release Planning Cookbook](Release_Planning_Cookbook.md). For the detailed definitions of all properties, refer to the [JSON Schemas](../artifacts/metadata-schemas/schemas/).
 
 ### `release-plan.yaml` (Living Plan)
 Located in `{repo_root}/release-plan.yaml`. Owned by codeowners. Defines **what you want to release**.
