@@ -80,9 +80,9 @@ If substantive issues are found during review, they must be fixed on `main`, NOT
     - **Problem**: The API or Test definition in the release does not match what was intended, or bugs were found.
     - **Action**: 
         1.  Fix the issue on `main` via a standard Pull Request.
-        2.  **Option A (Reset)**: If you haven't made manual edits (e.g. Changelog), delete the release branch and re-trigger.
-        3.  **Option B (Sync)**: If you *have* made manual edits to preserve, merge `main` into the release branch. The automation should run again to update the artifacts (API files, metadata) based on the new code.
-    - **Why?**: Fixes must exist on `main` for future releases. Merging `main` brings the fix to the release branch while permitting retention of manual changes.
+        2.  Close the Release PR and delete the release branch.
+        3.  Re-trigger the release.
+    - **Why?**: Fixes must exist on `main` for future releases. The release branch should be treated as ephemeral until published.
 
 2.  **Wrong Version Number**:
     - **Problem**: The calculated version is wrong (e.g., `1.0.1` instead of `1.1.0`) because the `target_version` in the plan was incorrect.
