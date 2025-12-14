@@ -1,0 +1,4 @@
+apis:
+  - api_name: test-api
+    target_api_version: 1.0.0
+    target_api_status: public

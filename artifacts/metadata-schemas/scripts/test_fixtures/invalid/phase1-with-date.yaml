@@ -1,0 +1,14 @@
+repository:
+  repository_name: TestRepo
+  release_tag: r4.1
+  release_date: "2026-09-30T10:00:00Z"
+  release_type: public-release
+  src_commit_sha: null
+
+dependencies:
+  commonalities_release: r4.2 (1.0.0)
+
+apis:
+  - api_name: test-api
+    api_version: 1.0.0
+    api_title: "Test API"

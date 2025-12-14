@@ -1,0 +1,11 @@
+repository:
+  release_track: independent
+  target_release_tag: r1.1
+  target_release_type: pre-release-rc
+
+apis:
+  - api_name: test-api
+    target_api_version: 0.5.0
+    target_api_status: alpha
+    main_contacts:
+      - testuser

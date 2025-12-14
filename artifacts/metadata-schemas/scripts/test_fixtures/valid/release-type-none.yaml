@@ -1,0 +1,16 @@
+repository:
+  release_track: independent
+  target_release_tag: null
+  target_release_type: none
+
+apis:
+  - api_name: test-api
+    target_api_version: 0.1.0
+    target_api_status: draft
+    main_contacts:
+      - testuser
+  - api_name: another-api
+    target_api_version: 1.0.0
+    target_api_status: public
+    main_contacts:
+      - testuser2
