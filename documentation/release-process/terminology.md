@@ -14,7 +14,7 @@ These are independent numbering systems.
 
 **Release track:** How the repository participates in releases — `none`, `independent`, or `meta-release`.
 
-**Meta-release:** A coordinated CAMARA release cycle (e.g., `Fall26`).
+**Meta-release:** A coordinated CAMARA release cycle (e.g., `Sync26`).
 
 **Release type:** The maturity level of a repository release:
 
