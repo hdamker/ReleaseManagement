@@ -20,7 +20,7 @@ This document details the **release creation process** for CAMARA API repositori
 
 3. **Dual-branch separation**: Each snapshot uses two branches — a protected *snapshot branch* for mechanical changes (versions, URLs) and an editable *release-review branch* for documentation (e.g. CHANGELOG). The release-review branch is merged into the snapshot branch via Release PR. This prevents accidental corruption of version fields by construction.
 
-4. **Repository artifacts as source of truth**: The `release-metadata.yaml` on the snapshot branch is the authoritative record of the release attempt, including base commit SHA. The Release Issue (a dedicated GitHub issue for tracking the release) serves as UI, trigger surface, and audit trail — not the state store.
+4. **Repository artifacts as source of truth**: The `release-metadata.yaml` on the snapshot branch is the authoritative record of the release attempt, including source commit SHA (`src_commit_sha`). The Release Issue (a dedicated GitHub issue for tracking the release) serves as UI, trigger surface, and audit trail — not the state store.
 
 5. **Bot as guided UI**: Every automation response shows current state, key parameters, and all valid next actions — turning the bot into an interactive guide rather than just a log.
 
@@ -202,7 +202,7 @@ These refinements are **compatible extensions** to the concept. A change request
 **Rationale:**
 - Ensures reproducibility and auditability from repo artifacts
 - Avoids "issue as state store" complexity
-- Single source of truth for base commit SHA, snapshot identity, release configuration
+- Single source of truth for source commit (`src_commit_sha`), snapshot identity, release configuration
 - State derivable from artifact existence (snapshot branch, draft release)
 
 ### 2.4 Separation of Mechanical and Reviewable Content
@@ -267,7 +267,7 @@ These refinements are **compatible extensions** to the concept. A change request
 
 **Snapshot:** An immutable, automation-owned branch representing one attempt at a release. Identified by `rX.Y-<shortsha>`. Can be discarded and replaced by a new snapshot.
 
-**`release-metadata.yaml`:** The authoritative record for a snapshot, created automatically on the snapshot branch. Contains base commit SHA, snapshot identity, and release configuration. Bot messages derive information from this file.
+**`release-metadata.yaml`:** The authoritative record for a snapshot, created automatically on the snapshot branch. Contains source commit (`src_commit_sha`), snapshot identity, and release configuration. Bot messages derive information from this file.
 
 **Active Snapshot:** The latest snapshot branch for a release tag. There is only one at a time.
 
@@ -498,7 +498,7 @@ When `/create-snapshot` is run, automation:
 7. **If validation passes:**
    - Creates snapshot branch `release-snapshot/rX.Y-<shortsha>`
    - Commits mechanical changes (version replacements, URL updates) directly to the snapshot branch
-   - Creates `release-metadata.yaml` with base commit SHA and release configuration
+   - Creates `release-metadata.yaml` with source commit (`src_commit_sha`) and release configuration
    - Creates release-review branch `release-review/rX.Y-<shortsha>`
    - Commits automated updates for the release to CHANGELOG, README to the release-review branch
    - Creates the Release PR: release-review → release-snapshot, titled `Release Review: {repo} {tag} ({type}{, meta})` (e.g., "Release Review: QualityOnDemand r4.1 (rc, Sync26)")
@@ -549,7 +549,7 @@ Automation creates draft release (no tag yet)
 Codeowner: /publish-release --confirm r4.1
        ↓
 Automation publishes release (creates tag r4.1)
-Creates reference tag src/r4.1 on main
+Creates reference tag source/r4.1 on main
 Creates post-release sync PR (CHANGELOG + README → main)
 Deletes snapshot and release-review branches (tag preserves content)
 Closes Release Issue
@@ -1091,7 +1091,7 @@ Publishing is a high-impact, hard-to-revert operation. To prevent accidental pub
 
 1. `/publish-release` (without arguments) posts a confirmation message showing:
    - Draft release tag and URL
-   - Base commit (short SHA)
+   - Source commit (short SHA)
    - The exact confirm command to copy/paste
 
 2. `/publish-release --confirm <tag>` executes the publication if `<tag>` matches the draft.
@@ -1103,7 +1103,7 @@ When `/publish-release --confirm <tag>` is executed:
 1. **Validate** draft release exists for `<tag>`
 2. **Finalize metadata**: Set `release_date` to current UTC timestamp in `release-metadata.yaml`
 3. **Publish release**: Update draft to published (creates tag `rX.Y`)
-4. **Create reference tag**: `src/rX.Y` on main at `src_commit_sha`
+4. **Create reference tag**: `source/rX.Y` on main at `src_commit_sha`
 5. **Create sync PR**: Post-release sync PR to main (see Section 8)
 6. **Cleanup branches**: Delete snapshot and release-review branches
 7. **Post success message**: `release_published` bot comment with release URL and sync PR link
@@ -1131,14 +1131,14 @@ A reference tag marks the branch point on main for potential maintenance branch 
 
 | Aspect | Specification |
 |--------|---------------|
-| Format | `src/rX.Y` (e.g., `src/r4.1`) |
+| Format | `source/rX.Y` (e.g., `source/r4.1`) |
 | Target | `src_commit_sha` on main branch |
 | Created | During `/publish-release` execution |
 
-**Purpose:** Enables future `git checkout -b maintenance/r4 src/r4.1` without commit archaeology.
+**Purpose:** Enables future `git checkout -b maintenance/r4 source/r4.1` without commit archaeology.
 
 **Normative requirements:**
-- The `src/rX.Y` tag is a convenience pointer only
+- The `source/rX.Y` tag is a convenience pointer only
 - The `src_commit_sha` field in `release-metadata.yaml` is the authoritative source reference
 - Tools and scripts MUST use `src_commit_sha` when the exact source commit is required
 
