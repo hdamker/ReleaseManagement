@@ -12,7 +12,7 @@ The `release-plan.yaml` file declares your **intent** for the next release. It i
 ```yaml
 repository:
   release_track: meta-release
-  meta_release: Fall26
+  meta_release: Sync26
   target_release_tag: r4.1
   target_release_type: pre-release-rc
 
@@ -33,7 +33,7 @@ apis:
 | Field | Description |
 |-------|-------------|
 | `release_track` | `independent` (default) or `meta-release` |
-| `meta_release` | Meta-release cycle (e.g., `Fall26`) — required if track is `meta-release` |
+| `meta_release` | Meta-release cycle (e.g., `Sync26`) — required if track is `meta-release` |
 | `target_release_tag` | Release tag (e.g., `r4.1`) |
 | `target_release_type` | `none` (no release planned), `pre-release-alpha`, `pre-release-rc`, `public-release`, `maintenance-release` |
 

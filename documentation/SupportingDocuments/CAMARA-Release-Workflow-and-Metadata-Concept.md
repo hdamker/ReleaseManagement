@@ -32,7 +32,7 @@ The process achieves these objectives through:
 | Term                   | Description |
 |------------------------|-------------|
 | `release_track`        | Release track determining how repository participates: `independent` (outside meta-release, default), `meta-release` (participating in meta-release). |
-| `meta_release`         | Meta-release label (e.g., `Fall26`). Only used when `release_track` is `meta-release`. |
+| `meta_release`         | Meta-release label (e.g., `Sync26`). Only used when `release_track` is `meta-release`. |
 | `target_release_tag`   | Target CAMARA release tag this release should have (e.g., `r4.1`). Distinct from API SemVer. |
 | `target_release_type`  | Codeowner-declared release type for next release, validated by CI: `none` (not ready), `pre-release-alpha` (requires all APIs at alpha+), `pre-release-rc` (requires all APIs at rc+), `public-release` (requires all APIs public), `maintenance-release` (maintenance). |
 | `target_api_status`    | Per-API target status for next release: `draft` (declared, basic validation), `alpha`, `rc`, `public`. Extension numbers are auto-calculated. |
@@ -55,7 +55,7 @@ Planning metadata owned by codeowners, manually updated and CI-validated. Contai
 ```yaml
 repository:
   release_track: meta-release  # independent or meta-release
-  meta_release: Fall26  # Only when release_track is meta-release
+  meta_release: Sync26  # Only when release_track is meta-release
   target_release_tag: r4.1
   target_release_type: pre-release-alpha  # Repository ready for pre-release with mixed API status
 
@@ -108,7 +108,7 @@ repository:
   release_date: 2025-11-22T14:30:00Z  # Actual release date and time in ISO 8601 format (UTC)
   release_type: pre-release-alpha
   src_commit_sha: abcd1234efgh5678  # Last commit from main or maintenance branch included in this release
-  release_notes: Pre-release for CAMARA Fall26 release cycle.
+  release_notes: Pre-release for CAMARA Sync26 release cycle.
 
 dependencies:
   commonalities_release: r4.2 (1.2.0-rc.1)
@@ -296,13 +296,13 @@ See Appendix for detailed branching diagrams and maintenance strategy.
 - Post-release: Generate and attach `release-metadata.yaml` as release artifacts (can be added after release)
 
 ### Spring26 (October 2025 - March 2026)
-- All repositories add `release-plan.yaml` with their planning e.g. for Fall26 (based on pre-populated file)
+- All repositories add `release-plan.yaml` with their planning e.g. for Sync26 (based on pre-populated file)
 - Auto-generate meta-release overview tables from YAML files
 - Wiki tracker pages deprecated (no longer maintained)
 - **Parallel operation**: Manual and automated release process (selected repositories as early adopters)
 - **Ambition**: Spring26 M4 milestone automated for all participating API repositories
 
-### Fall26 (April 2026)
+### Sync26 (April 2026)
 - Full automation implementation
 - Wiki completely deprecated
 - Mandatory adoption for all repositories

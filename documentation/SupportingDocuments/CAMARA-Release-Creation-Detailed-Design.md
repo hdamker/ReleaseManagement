@@ -501,7 +501,7 @@ When `/create-snapshot` is run, automation:
    - Creates `release-metadata.yaml` with base commit SHA and release configuration
    - Creates release-review branch `release-review/rX.Y-<shortsha>`
    - Commits automated updates for the release to CHANGELOG, README to the release-review branch
-   - Creates the Release PR: release-review → release-snapshot, titled `Release Review: {repo} {tag} ({type}{, meta})` (e.g., "Release Review: QualityOnDemand r4.1 (rc, Fall26)")
+   - Creates the Release PR: release-review → release-snapshot, titled `Release Review: {repo} {tag} ({type}{, meta})` (e.g., "Release Review: QualityOnDemand r4.1 (rc, Sync26)")
    - Updates the Release Issue label to `release-state: snapshot-active`
    - Posts success comment with links and next steps in the Release Issue
 
@@ -566,7 +566,7 @@ repository:
   release_type: pre-release-rc
   release_date: null                   # Set at publication
   src_commit_sha: abc1234def5678901234567890abcdef12345678  # Set at snapshot creation
-  release_notes: "Pre-release for CAMARA Fall26 meta-release."
+  release_notes: "Pre-release for CAMARA Sync26 meta-release."
 
 dependencies:
   commonalities_release: "r3.4 (1.2.0)"
