@@ -201,7 +201,7 @@ The release finalization follows a two-phase process:
 
 1. Automation creates snapshot branch from main/maintenance HEAD (Step 2)
 2. `release-metadata.yaml` on snapshot branch contains:
-   - `base_commit_sha`: SHA from base branch at snapshot creation
+   - `src_commit_sha`: SHA from base branch at snapshot creation
    - Other fields derived from `release-plan.yaml`
 3. Release PR is created for review (release-review branch → snapshot branch)
 4. **Important - Immutable snapshot (MVP implementation)**:
@@ -248,7 +248,7 @@ After release is tagged and published:
 - Forces explicit planning for next release cycle
 
 #### 5c. Tag reference point on `main`:
-- Create tag `src/rX.Y` (e.g., `src/r4.1`) on main at branch point
+- Create tag `source/rX.Y` (e.g., `source/r4.1`) on main at branch point
 - Marks commit for potential maintenance branch creation
 - Reference for comparing API changes in next release
 - Note: This is NOT a release tag, just a reference marker
