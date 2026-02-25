@@ -22,8 +22,7 @@ on:
 
 jobs:
   track-progress:
-    # Fork testing: point to hdamker fork branch
-    uses: hdamker/project-administration/.github/workflows/release-progress-tracker.yml@release-progress-tracker
+    uses: camaraproject/project-administration/.github/workflows/release-progress-tracker.yml@main
     with:
       debug: ${{ inputs.debug || false }}
     secrets: inherit
