@@ -21,7 +21,7 @@ Release readiness is tracked through `release-plan.yaml` configuration, release 
 | Initial public | Derived | API status is `public` and major version is 0 (e.g., v0.5.0) |
 | Stable public | Derived | API status is `public` and major version ≥ 1 (e.g., v1.0.0) |
 
-The Release Issue and Release PR embed the readiness matrix as a convenience copy; this document is the canonical source.
+The Release Issue and Release PR embed the readiness matrix as a convenience copy; this document holds the reference source.
 
 ## Release Assets
 
