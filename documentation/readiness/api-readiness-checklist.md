@@ -34,7 +34,7 @@ The Release Issue and Release PR embed the readiness matrix as a convenience cop
 | 5 | User Stories | At least one user story per API demonstrating the intended use | `documentation/API_documentation/` | No | At least one user story document per API exists |
 | 6 | Test Cases (basic) | Sunny day scenarios and main error cases; at least one `.feature` file per API | `code/Test_definitions/` | File existence only | At least one `.feature` file per API with sunny day + main error cases |
 | 7 | Test Cases (enhanced) | Rainy day scenarios, edge cases, and error handling coverage | `code/Test_definitions/` | No | Additional scenarios beyond basic: rainy day, edge cases, error handling |
-| 8 | API description | Wiki page with content for external visibility | CAMARA Sub Project Wiki | No | Wiki page is present and up to date |
+| 8 | API Description | Wiki page with content for external visibility | CAMARA Sub Project Wiki | No | Wiki page is present and up to date |
 
 ## Requirements by API Status
 
@@ -49,13 +49,13 @@ The following matrix defines which assets are mandatory (M) or optional (O) for 
 | 5 | User Stories | O | O | O | M |
 | 6 | Test Cases (basic) | O | M | M | M |
 | 7 | Test Cases (enhanced) | O | O | O | M |
-| 8 | API description | O | O | M | M |
+| 8 | API Description | O | O | M | M |
 
 **Why this progression:**
 
 - **Alpha**: The API is under active development. Only the API definition and basic documentation are required. Teams are iterating on the design and gathering feedback.
 - **Release Candidate (rc)**: The API is feature-complete and ready for implementation testing. Commonalities compliance and basic test cases become mandatory to ensure interoperability.
-- **Initial Public**: The API is ready for first implementations by external parties. All API versions in the release are initial (the major version number = 0: 0.y.z). An API description is added for external visibility.
+- **Initial Public**: The API is ready for first implementations by external parties. All API versions in the release are initial (the major version number = 0: 0.y.z). An API Description is required for external visibility.
 - **Stable Public**: The API is production-grade, with at least one API version at major version 1 or higher. All assets are mandatory, including enhanced test cases and user stories, to support production deployments.
 
 ## Preparing the release content (on main)
