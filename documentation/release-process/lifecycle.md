@@ -89,6 +89,7 @@ This phase is ongoing until you decide to release.
 
 **What you see:**
 - Release tag `rX.Y` created
+- Pointer branch created (`release/rX.Y` or `pre-release/rX.Y`) at the tag commit
 - Post-release sync PR created (merge it to update `main`)
 - Release Issue closed
 

@@ -1104,10 +1104,11 @@ When `/publish-release --confirm <tag>` is executed:
 2. **Finalize metadata**: Set `release_date` to current UTC timestamp in `release-metadata.yaml`
 3. **Publish release**: Update draft to published (creates tag `rX.Y`)
 4. **Create reference tag**: `source/rX.Y` on main at `src_commit_sha`
-5. **Create sync PR**: Post-release sync PR to main (see Section 8)
-6. **Cleanup branches**: Delete snapshot and release-review branches
-7. **Post success message**: `release_published` bot comment with release URL and sync PR link
-8. **Close issue**: Update state to PUBLISHED, close Release Issue (after success message)
+5. **Create pointer branch**: `release/rX.Y` or `pre-release/rX.Y` at the tag commit (see Section 8.2)
+6. **Create sync PR**: Post-release sync PR to main (see Section 8)
+7. **Cleanup branches**: Delete snapshot and release-review branches
+8. **Post success message**: `release_published` bot comment with release URL and sync PR link
+9. **Close issue**: Update state to PUBLISHED, close Release Issue (after success message)
 
 ### 7.3 Bot Messages
 
@@ -1142,7 +1143,26 @@ A reference tag marks the branch point on main for potential maintenance branch 
 - The `src_commit_sha` field in `release-metadata.yaml` is the authoritative source reference
 - Tools and scripts MUST use `src_commit_sha` when the exact source commit is required
 
-### 8.2 Post-Release Sync PR
+### 8.2 Release Pointer Branch
+
+A pointer branch is created at the release tag commit to prevent GitHub's "commit does not belong to any branch" warning when browsing the tag tree view.
+
+| Aspect | Specification |
+|--------|---------------|
+| Format (public) | `release/rX.Y` (e.g., `release/r4.1`) |
+| Format (pre-release) | `pre-release/rX.Y` (e.g., `pre-release/r2.1`) |
+| Target | Same commit as the release tag `rX.Y` |
+| Created | During `/publish-release` execution (after tag creation) |
+
+**Protection model:**
+- Public release pointer branches (`release/**`) are fully protected: no creation, deletion, update, or force push except by the automation App and org admins
+- Pre-release pointer branches (`pre-release/**`) are immutable (no creation, update, or force push) but deletable by codeowners to keep the branch list manageable as pre-releases accumulate
+
+**Lifecycle:** Pointer branches are not required to be kept permanently. Pre-release pointers may be deleted by codeowners when superseded. Release pointers may be removed when API lifecycle warrants it.
+
+**Note:** The release tag remains the primary release identifier. The pointer branch is a technical measure to prevent the GitHub warning and provide an alternative navigation path via `/tree/release/rX.Y`.
+
+### 8.3 Post-Release Sync PR
 
 Automation creates a PR to sync release artifacts back to main.
 
@@ -1160,17 +1180,19 @@ Automation creates a PR to sync release artifacts back to main.
 
 **Future enhancement (post-MVP):** Optional `/publish-release --confirm <tag> --auto-merge-sync` flag to auto-merge only if CI passes, only automation-managed files change, and branch protections allow it.
 
-### 8.3 Branch Cleanup
+### 8.4 Branch Cleanup
 
 | Branch | Action |
 |--------|--------|
-| `release-snapshot/rX.Y-{sha}` | Deleted (tag preserves content) |
+| `release-snapshot/rX.Y-{sha}` | Deleted (tag and pointer branch preserve content) |
 | `release-review/rX.Y-{sha}` | Deleted (content preserved in release tag) |
 | `post-release/rX.Y` | Deleted by GitHub on PR merge |
+| `release/rX.Y` | Kept (protected pointer to tag commit) |
+| `pre-release/rX.Y` | Kept (deletable by codeowners when superseded) |
 
 **MVP note:** The review branch may already have been deleted by a codeowner before publication. If it still exists, MVP renames it to `release-review/rX.Y-{sha}-published` instead of deleting.
 
-### 8.4 Release Issue Closure
+### 8.5 Release Issue Closure
 
 After the success message (`release_published`) is posted:
 

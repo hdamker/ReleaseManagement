@@ -37,6 +37,8 @@ These are independent numbering systems.
 
 **Release tag:** Git tag marking a published release (e.g., `r4.1`).
 
+**Release pointer branch:** A branch (`release/rX.Y` for public releases, `pre-release/rX.Y` for pre-releases) created by the automation at the release tag commit. Prevents the GitHub "commit does not belong to any branch" warning when browsing the tag tree view.
+
 ## Release States
 
 | State | Meaning |
