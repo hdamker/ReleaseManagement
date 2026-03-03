@@ -1,19 +1,15 @@
 metadata:
-  last_updated: '2026-02-25T15:13:39Z'
-  schema_version: 1.0.0
-  collector_version: 1.0.0
-  collection_stats:
-    repos_scanned: 67
-    repos_with_plan: 11
-    repos_planned: 4
-    api_calls: 91
-    duration_seconds: 11.1
+  last_updated: '2026-03-03T10:11:46Z'
+  last_checked: '2026-03-03T10:11:46Z'
+  releases_master_updated: '2026-02-24T17:21:49.981Z'
+  schema_version: 1.1.0
+  collector_version: 1.1.0
 meta_releases:
 - name: Fall25
-  total_apis: 5
+  total_apis: 11
   m1_achieved: 3
-  m3_achieved: 4
-  m4_achieved: 5
+  m3_achieved: 10
+  m4_achieved: 11
 - name: Spring26
   total_apis: 1
   m1_achieved: 0
@@ -25,6 +21,106 @@ meta_releases:
   m3_achieved: 0
   m4_achieved: 0
 progress:
+- repository: ApplicationEndpointDiscovery
+  github_url: https://github.com/camaraproject/ApplicationEndpointDiscovery
+  release_track: meta-release
+  meta_release: Fall25
+  target_release_tag: r1.2
+  target_release_type: none
+  dependencies:
+    commonalities_release: r3.4
+    identity_consent_management_release: r3.3
+  apis:
+  - api_name: application-endpoint-discovery
+    target_api_version: 0.1.0
+    target_api_status: public
+    main_contacts:
+    - gunjald
+    - Kevsy
+    - crissancas
+    - FabrizioMoggio
+    - seralogar
+    - gainsley
+    - JoseMConde
+    - maheshc01
+  state: not_planned
+  artifacts:
+    snapshot_branch: null
+    release_pr: null
+    draft_release: null
+    release_issue: null
+  published_context:
+    latest_public_release: r1.2
+    newest_pre_release: null
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: application-endpoint-discovery
+        api_version: null
+    m3:
+      release_tag: r1.1
+      release_date: '2025-07-24T10:18:04Z'
+      apis:
+      - api_name: application-endpoint-discovery
+        api_version: 0.1.0-rc.1
+    m4:
+      release_tag: r1.2
+      release_date: '2025-09-16T19:23:11Z'
+      apis:
+      - api_name: application-endpoint-discovery
+        api_version: 0.1.0
+- repository: ApplicationEndpointRegistration
+  github_url: https://github.com/camaraproject/ApplicationEndpointRegistration
+  release_track: meta-release
+  meta_release: Fall25
+  target_release_tag: r1.2
+  target_release_type: none
+  dependencies:
+    commonalities_release: r3.4
+    identity_consent_management_release: r3.3
+  apis:
+  - api_name: application-endpoint-registration
+    target_api_version: 0.1.0
+    target_api_status: public
+    main_contacts:
+    - gunjald
+    - Kevsy
+    - crissancas
+    - FabrizioMoggio
+    - seralogar
+    - gainsley
+    - JoseMConde
+    - maheshc01
+  state: not_planned
+  artifacts:
+    snapshot_branch: null
+    release_pr: null
+    draft_release: null
+    release_issue: null
+  published_context:
+    latest_public_release: r1.2
+    newest_pre_release: null
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: application-endpoint-registration
+        api_version: null
+    m3:
+      release_tag: r1.1
+      release_date: '2025-07-31T09:55:23Z'
+      apis:
+      - api_name: application-endpoint-registration
+        api_version: 0.1.0-rc.1
+    m4:
+      release_tag: r1.2
+      release_date: '2025-09-17T09:17:03Z'
+      apis:
+      - api_name: application-endpoint-registration
+        api_version: 0.1.0
 - repository: CallForwardingSignal
   github_url: https://github.com/camaraproject/CallForwardingSignal
   release_track: meta-release
@@ -191,6 +287,33 @@ progress:
       apis:
       - api_name: energy-footprint-notification
         api_version: 0.1.0
+- repository: IoTDeviceManagement
+  github_url: https://github.com/camaraproject/IoTDeviceManagement
+  release_track: independent
+  target_release_tag: r1.1
+  target_release_type: none
+  dependencies:
+    commonalities_release: r3.4
+    identity_consent_management_release: r3.3
+  apis:
+  - api_name: placeholder-entry
+    target_api_version: 0.1.0
+    target_api_status: draft
+    main_contacts:
+    - maheshc01
+    - chenfr2-ChinaTelecom
+    - XunliYang
+    - rkandoi
+  state: not_planned
+  artifacts:
+    snapshot_branch: null
+    release_pr: null
+    draft_release: null
+    release_issue: null
+  published_context:
+    latest_public_release: null
+    newest_pre_release: null
+  cycle_releases: {}
 - repository: IoTNetworkOptimization
   github_url: https://github.com/camaraproject/IoTNetworkOptimization
   release_track: independent
@@ -261,6 +384,81 @@ progress:
       apis:
       - api_name: iot-sim-fraud-prevention
         api_version: null
+- repository: MultiPointVPN
+  github_url: https://github.com/camaraproject/MultiPointVPN
+  release_track: independent
+  target_release_tag: r1.1
+  target_release_type: pre-release-alpha
+  dependencies:
+    commonalities_release: r3.4
+    identity_consent_management_release: r3.3
+  apis:
+  - api_name: multi-point-vpn
+    target_api_version: 0.1.0
+    target_api_status: alpha
+    main_contacts:
+    - abd-abhisek
+    - hemantagogoi-infy
+  state: planned
+  artifacts:
+    snapshot_branch: null
+    release_pr: null
+    draft_release: null
+    release_issue: null
+  published_context:
+    latest_public_release: null
+    newest_pre_release: null
+  cycle_releases: {}
+- repository: OptimalEdgeDiscovery
+  github_url: https://github.com/camaraproject/OptimalEdgeDiscovery
+  release_track: meta-release
+  meta_release: Fall25
+  target_release_tag: r1.2
+  target_release_type: none
+  dependencies:
+    commonalities_release: r3.4
+    identity_consent_management_release: r3.3
+  apis:
+  - api_name: optimal-edge-discovery
+    target_api_version: 0.1.0
+    target_api_status: public
+    main_contacts:
+    - gunjald
+    - Kevsy
+    - crissancas
+    - FabrizioMoggio
+    - seralogar
+    - gainsley
+    - JoseMConde
+    - maheshc01
+  state: not_planned
+  artifacts:
+    snapshot_branch: null
+    release_pr: null
+    draft_release: null
+    release_issue: null
+  published_context:
+    latest_public_release: r1.2
+    newest_pre_release: null
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: optimal-edge-discovery
+        api_version: null
+    m3:
+      release_tag: r1.1
+      release_date: '2025-07-30T16:41:18Z'
+      apis:
+      - api_name: optimal-edge-discovery
+        api_version: 0.1.0-rc.1
+    m4:
+      release_tag: r1.2
+      release_date: '2025-09-17T15:32:16Z'
+      apis:
+      - api_name: optimal-edge-discovery
+        api_version: 0.1.0
 - repository: RainfallIntensity
   github_url: https://github.com/camaraproject/RainfallIntensity
   release_track: independent
@@ -285,6 +483,51 @@ progress:
     latest_public_release: null
     newest_pre_release: null
   cycle_releases: {}
+- repository: RegionDeviceCount
+  github_url: https://github.com/camaraproject/RegionDeviceCount
+  release_track: meta-release
+  meta_release: Fall25
+  target_release_tag: r2.2
+  target_release_type: none
+  dependencies:
+    commonalities_release: r3.4
+    identity_consent_management_release: r3.3
+  apis:
+  - api_name: region-device-count
+    target_api_version: 0.2.0
+    target_api_status: public
+    main_contacts:
+    - chinaunicomyangfan
+    - ClownsAlbert
+    - ChuanyuChen
+  state: not_planned
+  artifacts:
+    snapshot_branch: null
+    release_pr: null
+    draft_release: null
+    release_issue: null
+  published_context:
+    latest_public_release: r2.2
+    newest_pre_release: null
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: region-device-count
+        api_version: null
+    m3:
+      release_tag: r2.1
+      release_date: '2025-07-25T08:52:58Z'
+      apis:
+      - api_name: region-device-count
+        api_version: 0.2.0-rc.1
+    m4:
+      release_tag: r2.2
+      release_date: '2025-09-15T08:06:27Z'
+      apis:
+      - api_name: region-device-count
+        api_version: 0.2.0
 - repository: ReleaseTest
   github_url: https://github.com/camaraproject/ReleaseTest
   release_track: meta-release
@@ -292,21 +535,18 @@ progress:
   target_release_tag: r1.1
   target_release_type: pre-release-alpha
   dependencies:
-    commonalities_release: r3.4
-    identity_consent_management_release: r3.3
+    commonalities_release: r4.1
+    identity_consent_management_release: r4.1
   apis:
   - api_name: release-test
-    target_api_version: 0.1.0
+    target_api_version: 1.0.0
     target_api_status: alpha
     main_contacts:
     - hdamker-bot
-  state: snapshot_active
+  state: published
   artifacts:
-    snapshot_branch: release-snapshot/r1.1-f0cb0ac
-    release_pr:
-      number: 14
-      state: open
-      url: https://github.com/camaraproject/ReleaseTest/pull/14
+    snapshot_branch: null
+    release_pr: null
     draft_release: null
     release_issue: null
   published_context:
@@ -331,6 +571,98 @@ progress:
       apis:
       - api_name: release-test
         api_version: null
+- repository: SimpleEdgeDiscovery
+  github_url: https://github.com/camaraproject/SimpleEdgeDiscovery
+  release_track: meta-release
+  meta_release: Fall25
+  target_release_tag: r2.2
+  target_release_type: none
+  dependencies:
+    commonalities_release: r3.4
+    identity_consent_management_release: r3.3
+  apis:
+  - api_name: simple-edge-discovery
+    target_api_version: 2.0.0
+    target_api_status: public
+    main_contacts:
+    - Kevsy
+    - crissancas
+    - JoseMConde
+    - maheshc01
+  state: not_planned
+  artifacts:
+    snapshot_branch: null
+    release_pr: null
+    draft_release: null
+    release_issue: null
+  published_context:
+    latest_public_release: r2.2
+    newest_pre_release: null
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: simple-edge-discovery
+        api_version: null
+    m3:
+      release_tag: r2.1
+      release_date: '2025-07-22T16:29:30Z'
+      apis:
+      - api_name: simple-edge-discovery
+        api_version: 2.0.0-rc.1
+    m4:
+      release_tag: r2.2
+      release_date: '2025-09-17T17:29:46Z'
+      apis:
+      - api_name: simple-edge-discovery
+        api_version: 2.0.0
+- repository: SubscriptionStatus
+  github_url: https://github.com/camaraproject/SubscriptionStatus
+  release_track: meta-release
+  meta_release: Fall25
+  target_release_tag: r1.2
+  target_release_type: none
+  dependencies:
+    commonalities_release: r3.4
+    identity_consent_management_release: r3.3
+  apis:
+  - api_name: subscription-status
+    target_api_version: 0.1.0
+    target_api_status: public
+    main_contacts:
+    - chinaunicomyangfan
+    - ClownsAlbert
+    - ChuanyuChen
+    - DanXu-ChinaTelecom
+  state: not_planned
+  artifacts:
+    snapshot_branch: null
+    release_pr: null
+    draft_release: null
+    release_issue: null
+  published_context:
+    latest_public_release: r1.2
+    newest_pre_release: null
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: subscription-status
+        api_version: null
+    m3:
+      release_tag: r1.1
+      release_date: '2025-07-24T07:59:09Z'
+      apis:
+      - api_name: subscription-status
+        api_version: 0.1.0-rc.1
+    m4:
+      release_tag: r1.2
+      release_date: '2025-09-15T07:00:03Z'
+      apis:
+      - api_name: subscription-status
+        api_version: 0.1.0
 - repository: TrafficInfluence
   github_url: https://github.com/camaraproject/TrafficInfluence
   release_track: meta-release
