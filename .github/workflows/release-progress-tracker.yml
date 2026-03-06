@@ -27,7 +27,7 @@ on:
 
 jobs:
   track-progress:
-    uses: camaraproject/project-administration/.github/workflows/release-progress-tracker.yml@main
+    uses: hdamker/project-administration/.github/workflows/release-progress-tracker.yml@w005-onboarding-warning
     with:
       debug: ${{ inputs.debug || false }}
     secrets: inherit
