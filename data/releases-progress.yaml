@@ -1,27 +1,25 @@
 metadata:
-  last_updated: '2026-03-02T15:03:25Z'
-  schema_version: 1.0.0
-  collector_version: 1.0.0
-  collection_stats:
-    repos_scanned: 67
-    repos_with_plan: 19
-    repos_planned: 4
-    api_calls: 98
-    duration_seconds: 24.1
+  last_updated: '2026-03-06T08:47:51Z'
+  last_checked: '2026-03-06T08:47:51Z'
+  releases_master_updated: '2026-03-03T12:23:27.672Z'
+  schema_version: 1.2.0
+  collector_version: 1.2.0
+  repos_scanned: 67
+  repos_with_plan: 21
 meta_releases:
 - name: Fall25
-  total_apis: 11
+  total_apis: 12
   m1_achieved: 3
-  m3_achieved: 10
-  m4_achieved: 11
+  m3_achieved: 11
+  m4_achieved: 12
 - name: Spring26
-  total_apis: 1
-  m1_achieved: 0
+  total_apis: 2
+  m1_achieved: 1
   m3_achieved: 0
   m4_achieved: 0
 - name: Sync26
-  total_apis: 1
-  m1_achieved: 0
+  total_apis: 4
+  m1_achieved: 1
   m3_achieved: 0
   m4_achieved: 0
 progress:
@@ -172,12 +170,13 @@ progress:
         api_version: 0.4.0
 - repository: ClickToDial
   github_url: https://github.com/camaraproject/ClickToDial
-  release_track: independent
+  release_track: meta-release
+  meta_release: Spring26
   target_release_tag: r1.2
   target_release_type: pre-release-rc
   dependencies:
-    commonalities_release: r3.4
-    identity_consent_management_release: r3.3
+    commonalities_release: r4.1
+    identity_consent_management_release: r4.1
   apis:
   - api_name: click-to-dial
     target_api_version: 0.1.0
@@ -195,7 +194,29 @@ progress:
   published_context:
     latest_public_release: null
     newest_pre_release: r1.1
-  cycle_releases: {}
+  cycle_releases:
+    m1:
+      release_tag: r1.1
+      release_date: '2025-05-15T14:04:29Z'
+      apis:
+      - api_name: click-to-dial
+        api_version: 0.1.0-alpha.1
+    m3:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: click-to-dial
+        api_version: null
+    m4:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: click-to-dial
+        api_version: null
+  warnings:
+  - code: W005
+    message: Active release plan but no caller workflow installed
+    severity: warning
 - repository: ConsentInfo
   github_url: https://github.com/camaraproject/ConsentInfo
   release_track: independent
@@ -221,7 +242,29 @@ progress:
   published_context:
     latest_public_release: r1.2
     newest_pre_release: r2.1
-  cycle_releases: {}
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: consent-info
+        api_version: null
+    m3:
+      release_tag: r2.1
+      release_date: '2026-02-05T10:25:58Z'
+      apis:
+      - api_name: consent-info
+        api_version: 0.2.0-rc.1
+    m4:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: consent-info
+        api_version: null
+  warnings:
+  - code: W005
+    message: Active release plan but no caller workflow installed
+    severity: warning
 - repository: ConsentManagement
   github_url: https://github.com/camaraproject/ConsentManagement
   release_track: independent
@@ -247,7 +290,25 @@ progress:
   published_context:
     latest_public_release: null
     newest_pre_release: null
-  cycle_releases: {}
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: consent-management
+        api_version: null
+    m3:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: consent-management
+        api_version: null
+    m4:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: consent-management
+        api_version: null
 - repository: EnergyFootprintNotification
   github_url: https://github.com/camaraproject/EnergyFootprintNotification
   release_track: meta-release
@@ -317,7 +378,25 @@ progress:
   published_context:
     latest_public_release: null
     newest_pre_release: null
-  cycle_releases: {}
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: placeholder-entry
+        api_version: null
+    m3:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: placeholder-entry
+        api_version: null
+    m4:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: placeholder-entry
+        api_version: null
 - repository: IoTNetworkOptimization
   github_url: https://github.com/camaraproject/IoTNetworkOptimization
   release_track: independent
@@ -343,7 +422,25 @@ progress:
   published_context:
     latest_public_release: null
     newest_pre_release: r1.1
-  cycle_releases: {}
+  cycle_releases:
+    m1:
+      release_tag: r1.1
+      release_date: '2025-12-11T13:11:28Z'
+      apis:
+      - api_name: iot-network-optimization
+        api_version: 0.1.0-alpha.1
+    m3:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: iot-network-optimization
+        api_version: null
+    m4:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: iot-network-optimization
+        api_version: null
 - repository: IoTSIMFraudPrevention
   github_url: https://github.com/camaraproject/IoTSIMFraudPrevention
   release_track: meta-release
@@ -388,22 +485,26 @@ progress:
       apis:
       - api_name: iot-sim-fraud-prevention
         api_version: null
+  warnings:
+  - code: W005
+    message: Active release plan but no caller workflow installed
+    severity: warning
 - repository: MultiPointVPN
   github_url: https://github.com/camaraproject/MultiPointVPN
   release_track: independent
   target_release_tag: r1.1
-  target_release_type: none
+  target_release_type: pre-release-alpha
   dependencies:
     commonalities_release: r3.4
     identity_consent_management_release: r3.3
   apis:
   - api_name: multi-point-vpn
     target_api_version: 0.1.0
-    target_api_status: draft
+    target_api_status: alpha
     main_contacts:
     - abd-abhisek
     - hemantagogoi-infy
-  state: not_planned
+  state: planned
   artifacts:
     snapshot_branch: null
     release_pr: null
@@ -412,7 +513,74 @@ progress:
   published_context:
     latest_public_release: null
     newest_pre_release: null
-  cycle_releases: {}
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: multi-point-vpn
+        api_version: null
+    m3:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: multi-point-vpn
+        api_version: null
+    m4:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: multi-point-vpn
+        api_version: null
+  warnings:
+  - code: W005
+    message: Active release plan but no caller workflow installed
+    severity: warning
+- repository: NetworkSliceBooking
+  github_url: https://github.com/camaraproject/NetworkSliceBooking
+  release_track: meta-release
+  meta_release: Fall25
+  target_release_tag: r1.2
+  target_release_type: none
+  dependencies:
+    commonalities_release: r3.4
+    identity_consent_management_release: r3.3
+  apis:
+  - api_name: network-slice-booking
+    target_api_version: 0.1.0
+    target_api_status: public
+    main_contacts:
+    - chinaunicomyangfan
+    - DanXu-ChinaTelecom
+    - Kai-hw
+  state: not_planned
+  artifacts:
+    snapshot_branch: null
+    release_pr: null
+    draft_release: null
+    release_issue: null
+  published_context:
+    latest_public_release: r1.2
+    newest_pre_release: null
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: network-slice-booking
+        api_version: null
+    m3:
+      release_tag: r1.1
+      release_date: '2025-08-01T08:01:19Z'
+      apis:
+      - api_name: network-slice-booking
+        api_version: 0.1.0-rc.1
+    m4:
+      release_tag: r1.2
+      release_date: '2025-09-17T01:33:48Z'
+      apis:
+      - api_name: network-slice-booking
+        api_version: 0.1.0
 - repository: OptimalEdgeDiscovery
   github_url: https://github.com/camaraproject/OptimalEdgeDiscovery
   release_track: meta-release
@@ -463,6 +631,80 @@ progress:
       apis:
       - api_name: optimal-edge-discovery
         api_version: 0.1.0
+- repository: QualityOnDemand
+  github_url: https://github.com/camaraproject/QualityOnDemand
+  release_track: meta-release
+  meta_release: Sync26
+  target_release_tag: r4.1
+  target_release_type: pre-release-alpha
+  dependencies:
+    commonalities_release: r4.1
+    identity_consent_management_release: r4.1
+  apis:
+  - api_name: qos-profiles
+    target_api_version: 1.2.0
+    target_api_status: alpha
+    main_contacts:
+    - hdamker
+    - eric-murray
+    - RandyLevensalor
+    - jlurien
+  - api_name: qos-provisioning
+    target_api_version: 0.4.0
+    target_api_status: alpha
+    main_contacts:
+    - hdamker
+    - eric-murray
+    - RandyLevensalor
+    - jlurien
+  - api_name: quality-on-demand
+    target_api_version: 1.2.0
+    target_api_status: alpha
+    main_contacts:
+    - hdamker
+    - eric-murray
+    - RandyLevensalor
+    - jlurien
+  state: planned
+  artifacts:
+    snapshot_branch: null
+    release_pr: null
+    draft_release: null
+    release_issue: null
+  published_context:
+    latest_public_release: r3.2
+    newest_pre_release: null
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: qos-profiles
+        api_version: null
+      - api_name: qos-provisioning
+        api_version: null
+      - api_name: quality-on-demand
+        api_version: null
+    m3:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: qos-profiles
+        api_version: null
+      - api_name: qos-provisioning
+        api_version: null
+      - api_name: quality-on-demand
+        api_version: null
+    m4:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: qos-profiles
+        api_version: null
+      - api_name: qos-provisioning
+        api_version: null
+      - api_name: quality-on-demand
+        api_version: null
 - repository: RainfallIntensity
   github_url: https://github.com/camaraproject/RainfallIntensity
   release_track: independent
@@ -486,7 +728,25 @@ progress:
   published_context:
     latest_public_release: null
     newest_pre_release: null
-  cycle_releases: {}
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: rainfall-intensity
+        api_version: null
+    m3:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: rainfall-intensity
+        api_version: null
+    m4:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: rainfall-intensity
+        api_version: null
 - repository: RegionDeviceCount
   github_url: https://github.com/camaraproject/RegionDeviceCount
   release_track: meta-release
@@ -536,15 +796,15 @@ progress:
   github_url: https://github.com/camaraproject/ReleaseTest
   release_track: meta-release
   meta_release: Sync26
-  target_release_tag: r1.1
-  target_release_type: pre-release-alpha
+  target_release_tag: r1.2
+  target_release_type: pre-release-rc
   dependencies:
     commonalities_release: r4.1
     identity_consent_management_release: r4.1
   apis:
   - api_name: release-test
     target_api_version: 1.0.0
-    target_api_status: alpha
+    target_api_status: rc
     main_contacts:
     - hdamker-bot
   state: published
@@ -555,14 +815,14 @@ progress:
     release_issue: null
   published_context:
     latest_public_release: null
-    newest_pre_release: null
+    newest_pre_release: r1.1
   cycle_releases:
     m1:
-      release_tag: null
-      release_date: null
+      release_tag: r1.1
+      release_date: '2026-03-01T16:00:48Z'
       apis:
       - api_name: release-test
-        api_version: null
+        api_version: 1.0.0-alpha.1
     m3:
       release_tag: null
       release_date: null
@@ -575,6 +835,11 @@ progress:
       apis:
       - api_name: release-test
         api_version: null
+  warnings:
+  - code: W003
+    message: Release r1.2 is published but not yet in releases-master.yaml — milestone
+      data may be incomplete
+    severity: warning
 - repository: SimpleEdgeDiscovery
   github_url: https://github.com/camaraproject/SimpleEdgeDiscovery
   release_track: meta-release
