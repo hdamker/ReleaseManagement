@@ -27,7 +27,7 @@ on:
 
 jobs:
   track-progress:
-    uses: hdamker/project-administration/.github/workflows/release-progress-tracker.yml@progress-tracker-completed-historical
+    uses: hdamker/project-administration/.github/workflows/release-progress-tracker.yml@test/progress-tracker-completed-historical
     with:
       debug: ${{ inputs.debug || false }}
     secrets: inherit
