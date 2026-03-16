@@ -10,7 +10,7 @@
 #
 # Fork testing:
 #   Change the 'uses' line below to point at your fork/branch, e.g.:
-#     uses: hdamker/project-administration/.github/workflows/release-progress-tracker.yml@release-progress-tracker
+#     uses: hdamker/project-administration/.github/workflows/release-progress-tracker.yml@test/release-progress-tracker
 
 name: Release Progress Tracker
 
