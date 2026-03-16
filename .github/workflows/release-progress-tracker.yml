@@ -15,9 +15,9 @@
 name: Release Progress Tracker
 
 on:
-  schedule:
-    - cron: '23 5 * * *'   # Daily at 05:23 UTC
-    - cron: '23 14 * * *'  # Daily at 14:23 UTC
+  # schedule:
+  #  - cron: '23 5 * * *'   # Daily at 05:23 UTC
+  #  - cron: '23 14 * * *'  # Daily at 14:23 UTC
   workflow_dispatch:
     inputs:
       debug:
@@ -27,7 +27,7 @@ on:
 
 jobs:
   track-progress:
-    uses: hdamker/project-administration/.github/workflows/release-progress-tracker.yml@test/progress-tracker-column-consolidation
+    uses: hdamker/project-administration/.github/workflows/release-progress-tracker.yml@progress-tracker-completed-historical
     with:
       debug: ${{ inputs.debug || false }}
     secrets: inherit
