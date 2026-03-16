@@ -27,7 +27,7 @@ on:
 
 jobs:
   track-progress:
-    uses: camaraproject/project-administration/.github/workflows/release-progress-tracker.yml@main
+    uses: camaraproject/project-administration/.github/workflows/release-progress-tracker.yml@test/progress-tracker-column-consolidation
     with:
       debug: ${{ inputs.debug || false }}
     secrets: inherit
