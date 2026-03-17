@@ -1,21 +1,21 @@
 metadata:
-  last_updated: '2026-03-16T20:49:17Z'
-  last_checked: '2026-03-16T20:49:17Z'
+  last_updated: '2026-03-17T05:34:49Z'
+  last_checked: '2026-03-17T05:34:49Z'
   releases_master_updated: '2026-03-13T05:33:53.054Z'
   schema_version: 1.4.0
   collector_version: 1.4.0
   repos_scanned: 66
-  repos_with_plan: 31
+  repos_with_plan: 33
 meta_releases:
 - name: Fall24
   total_apis: 25
   m1_achieved: 2
-  m3_achieved: 22
+  m3_achieved: 23
   m4_achieved: 25
 - name: Fall25
   total_apis: 60
   m1_achieved: 5
-  m3_achieved: 59
+  m3_achieved: 60
   m4_achieved: 60
 - name: Spring25
   total_apis: 35
@@ -145,6 +145,57 @@ progress:
     apis:
     - api_name: application-endpoint-registration
       api_version: 0.1.0
+- repository: ApplicationProfiles
+  github_url: https://github.com/camaraproject/ApplicationProfiles
+  release_track: meta-release
+  meta_release: Fall25
+  target_release_tag: r1.2
+  target_release_type: none
+  dependencies:
+    commonalities_release: r3.4
+    identity_consent_management_release: r3.3
+  apis:
+  - api_name: application-profiles
+    target_api_version: 0.5.0
+    target_api_status: public
+    main_contacts:
+    - maheshc01
+    - Kevsy
+    - urvika-v
+  state: completed
+  artifacts:
+    snapshot_branch: null
+    release_pr: null
+    draft_release: null
+    release_issue: null
+  published_context:
+    latest_public_release: r1.2
+    newest_pre_release: null
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: application-profiles
+        api_version: null
+    m3:
+      release_tag: r1.1
+      release_date: '2025-07-29T16:08:11Z'
+      apis:
+      - api_name: application-profiles
+        api_version: 0.5.0-rc.1
+    m4:
+      release_tag: r1.2
+      release_date: '2025-09-17T15:37:44Z'
+      apis:
+      - api_name: application-profiles
+        api_version: 0.5.0
+  last_published:
+    release_tag: r1.2
+    release_date: '2025-09-17T15:37:44Z'
+    apis:
+    - api_name: application-profiles
+      api_version: 0.5.0
 - repository: BlockchainPublicAddress
   github_url: https://github.com/camaraproject/BlockchainPublicAddress
   release_track: meta-release
@@ -317,6 +368,72 @@ progress:
       api_version: 0.1.0-rc.1
   snapshot_api_versions:
     click-to-dial: 0.1.0-rc.1
+- repository: ConnectivityInsights
+  github_url: https://github.com/camaraproject/ConnectivityInsights
+  release_track: meta-release
+  meta_release: Fall25
+  target_release_tag: r3.2
+  target_release_type: none
+  dependencies:
+    commonalities_release: r3.4
+    identity_consent_management_release: r3.3
+  apis:
+  - api_name: connectivity-insights-subscriptions
+    target_api_version: 0.6.0
+    target_api_status: public
+    main_contacts:
+    - maheshc01
+    - kevsy
+    - urvika-v
+  - api_name: connectivity-insights
+    target_api_version: 0.6.0
+    target_api_status: public
+    main_contacts:
+    - maheshc01
+    - kevsy
+    - urvika-v
+  state: completed
+  artifacts:
+    snapshot_branch: null
+    release_pr: null
+    draft_release: null
+    release_issue: null
+  published_context:
+    latest_public_release: r3.2
+    newest_pre_release: null
+  cycle_releases:
+    m1:
+      release_tag: null
+      release_date: null
+      apis:
+      - api_name: connectivity-insights-subscriptions
+        api_version: null
+      - api_name: connectivity-insights
+        api_version: null
+    m3:
+      release_tag: r3.1
+      release_date: '2025-08-01T11:12:36Z'
+      apis:
+      - api_name: connectivity-insights-subscriptions
+        api_version: 0.6.0-rc.1
+      - api_name: connectivity-insights
+        api_version: 0.6.0-rc.1
+    m4:
+      release_tag: r3.2
+      release_date: '2025-09-17T15:44:03Z'
+      apis:
+      - api_name: connectivity-insights-subscriptions
+        api_version: 0.6.0
+      - api_name: connectivity-insights
+        api_version: 0.6.0
+  last_published:
+    release_tag: r3.2
+    release_date: '2025-09-17T15:44:03Z'
+    apis:
+    - api_name: connectivity-insights-subscriptions
+      api_version: 0.6.0
+    - api_name: connectivity-insights
+      api_version: 0.6.0
 - repository: ConsentInfo
   github_url: https://github.com/camaraproject/ConsentInfo
   release_track: independent
@@ -1726,51 +1843,6 @@ progress:
       api_version: 0.1.0
     - api_name: verified-caller
       api_version: 0.1.0
-- repository: ApplicationProfiles
-  github_url: https://github.com/camaraproject/ApplicationProfiles
-  release_track: meta-release
-  meta_release: Fall25
-  target_release_tag: null
-  target_release_type: null
-  apis:
-  - api_name: application-profiles
-    target_api_version: 0.5.0
-    target_api_status: ''
-  state: historical
-  artifacts:
-    snapshot_branch: null
-    release_pr: null
-    draft_release: null
-    release_issue: null
-  published_context:
-    latest_public_release: null
-    newest_pre_release: null
-  cycle_releases:
-    m1:
-      release_tag: null
-      release_date: null
-      apis:
-      - api_name: application-profiles
-        api_version: null
-    m3:
-      release_tag: r1.1
-      release_date: '2025-07-29T16:08:11Z'
-      apis:
-      - api_name: application-profiles
-        api_version: 0.5.0-rc.1
-    m4:
-      release_tag: r1.2
-      release_date: '2025-09-17T15:37:44Z'
-      apis:
-      - api_name: application-profiles
-        api_version: 0.5.0
-  last_published:
-    release_tag: r1.2
-    release_date: '2025-09-17T15:37:44Z'
-    apis:
-    - api_name: application-profiles
-      api_version: 0.5.0
-  source: historical
 - repository: BlockchainPublicAddress
   github_url: https://github.com/camaraproject/BlockchainPublicAddress
   release_track: meta-release
@@ -2196,62 +2268,6 @@ progress:
       api_version: 0.4.0
     - api_name: connectivity-insights
       api_version: 0.4.0
-  source: historical
-- repository: ConnectivityInsights
-  github_url: https://github.com/camaraproject/ConnectivityInsights
-  release_track: meta-release
-  meta_release: Fall25
-  target_release_tag: null
-  target_release_type: null
-  apis:
-  - api_name: connectivity-insights-subscriptions
-    target_api_version: 0.6.0
-    target_api_status: ''
-  - api_name: connectivity-insights
-    target_api_version: 0.6.0
-    target_api_status: ''
-  state: historical
-  artifacts:
-    snapshot_branch: null
-    release_pr: null
-    draft_release: null
-    release_issue: null
-  published_context:
-    latest_public_release: null
-    newest_pre_release: null
-  cycle_releases:
-    m1:
-      release_tag: null
-      release_date: null
-      apis:
-      - api_name: connectivity-insights-subscriptions
-        api_version: null
-      - api_name: connectivity-insights
-        api_version: null
-    m3:
-      release_tag: r3.1
-      release_date: '2025-08-01T11:12:36Z'
-      apis:
-      - api_name: connectivity-insights-subscriptions
-        api_version: 0.6.0-rc.1
-      - api_name: connectivity-insights
-        api_version: 0.6.0-rc.1
-    m4:
-      release_tag: r3.2
-      release_date: '2025-09-17T15:44:03Z'
-      apis:
-      - api_name: connectivity-insights-subscriptions
-        api_version: 0.6.0
-      - api_name: connectivity-insights
-        api_version: 0.6.0
-  last_published:
-    release_tag: r3.2
-    release_date: '2025-09-17T15:44:03Z'
-    apis:
-    - api_name: connectivity-insights-subscriptions
-      api_version: 0.6.0
-    - api_name: connectivity-insights
-      api_version: 0.6.0
   source: historical
 - repository: ConnectivityInsights
   github_url: https://github.com/camaraproject/ConnectivityInsights
