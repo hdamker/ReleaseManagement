@@ -1,6 +1,6 @@
 metadata:
-  last_updated: '2026-03-17T05:34:49Z'
-  last_checked: '2026-03-17T05:34:49Z'
+  last_updated: '2026-03-17T05:58:30Z'
+  last_checked: '2026-03-17T05:58:30Z'
   releases_master_updated: '2026-03-13T05:33:53.054Z'
   schema_version: 1.4.0
   collector_version: 1.4.0
@@ -18,10 +18,10 @@ meta_releases:
   m3_achieved: 60
   m4_achieved: 60
 - name: Spring25
-  total_apis: 35
-  m1_achieved: 1
+  total_apis: 36
+  m1_achieved: 2
   m3_achieved: 35
-  m4_achieved: 35
+  m4_achieved: 36
 - name: Spring26
   total_apis: 4
   m1_achieved: 1
@@ -4437,7 +4437,10 @@ progress:
   meta_release: Spring25
   target_release_tag: null
   target_release_type: null
-  apis: []
+  apis:
+  - api_name: region-device-count
+    target_api_version: 0.1.0
+    target_api_status: ''
   state: historical
   artifacts:
     snapshot_branch: null
@@ -4451,19 +4454,27 @@ progress:
     m1:
       release_tag: r1.1
       release_date: '2025-02-13T09:46:14Z'
-      apis: []
+      apis:
+      - api_name: region-device-count
+        api_version: null
     m3:
       release_tag: null
       release_date: null
-      apis: []
+      apis:
+      - api_name: region-device-count
+        api_version: null
     m4:
       release_tag: r1.2
       release_date: '2025-03-12T06:07:28Z'
-      apis: []
+      apis:
+      - api_name: region-device-count
+        api_version: null
   last_published:
     release_tag: r1.3
     release_date: '2025-06-04T11:39:59Z'
-    apis: []
+    apis:
+    - api_name: region-device-count
+      api_version: 0.1.0
   source: historical
 - repository: SimSwap
   github_url: https://github.com/camaraproject/SimSwap
