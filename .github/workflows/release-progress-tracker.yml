@@ -26,7 +26,7 @@ on:
 
 jobs:
   track-progress:
-    uses: camaraproject/project-administration/.github/workflows/release-progress-tracker.yml@main
+    uses: hdamker/project-administration/.github/workflows/release-progress-tracker.yml@fix/progress-tracker-pa197-pa198
     with:
       debug: ${{ inputs.debug || false }}
     secrets: inherit
