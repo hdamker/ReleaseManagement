@@ -188,10 +188,10 @@ The keywords "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SH
 
 | ID | Rule | Coverage | v1 Engine | Version | Notes |
 |----|------|----------|-----------|---------|-------|
-| DG-063 | MUST use openIdConnect scheme named 'openId' | v0_6: V6-036/V6-041 | spectral | both | |
-| DG-064 | openIdConnectUrl MUST use HTTPS | v0_6: V6-039 | spectral | both | |
-| DG-065 | openIdConnectUrl MUST point to .well-known/openid-configuration | v0_6: V6-040 | spectral | both | |
-| DG-066 | No oauth2 scheme type (must use openIdConnect) | v0_6: V6-042 | spectral | both | |
+| DG-063 | MUST use openIdConnect scheme named 'openId' | spectral: camara-security-openid-scheme (error) | spectral | both | S-042 in tooling v0.11.1; also S-041 camara-security-requirement-defined (error) for `security` names without a scheme |
+| DG-064 | openIdConnectUrl MUST use HTTPS | spectral: camara-security-openid-url (warn) | spectral | both | S-043 in tooling v0.11.1 |
+| DG-065 | openIdConnectUrl MUST point to .well-known/openid-configuration | spectral: camara-security-openid-url (warn) | spectral | both | S-043 in tooling v0.11.1 |
+| DG-066 | No oauth2 scheme type (must use openIdConnect) | spectral: camara-security-openid-scheme (error) | spectral | both | S-042 in tooling v0.11.1 |
 
 ---
 
@@ -267,7 +267,7 @@ Consolidated from design guide sections. This is the full set for the detailed d
 | DG-090 | protocol attribute MUST be "HTTP" | gap | spectral | both | Enum constraint |
 | DG-091 | sink MUST use HTTPS URI | gap | spectral | both | |
 | DG-092 | sinkCredential MUST NOT appear in responses | gap | python | both | |
-| DG-093 | notificationsBearerAuth scheme for callbacks | v0_6: V6-037/V6-044–046/V6-048 | python | both | |
+| DG-093 | notificationsBearerAuth scheme for callbacks | gap | spectral | both | Former v0.6 checks V6-037/V6-044–046/V6-048 are retired with the v0 validator; S-041 only checks that callback `security` names are defined |
 | DG-094 | Notification content-type: application/cloudevents+json | gap | spectral | both | |
 | DG-095 | Event version independent of API version | gap | python | both | Complex versioning logic |
 | DG-096 | Implicit subscriptions: callbacks defined in operations | v0_6: V6-067 | python | both | |
